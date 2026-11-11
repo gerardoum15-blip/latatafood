@@ -73,13 +73,27 @@ export function WaiterScreen() {
   );
 }
 
-export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true }: {
-  title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string) => void;
-  extra?: React.ReactNode; sendLabel?: string; canSend?: boolean;
+/** Platos que llevan empaque: todo menos las categorías marcadas sin empaque (bebidas). */
+export function suggestPackaging(items: OrderItem[], db: ReturnType<typeof useDb>) {
+  return items.reduce((s, i) => {
+    const p = db.products.find((x) => x.id === i.productId);
+    const c = db.categories.find((x) => x.id === p?.categoryId);
+    return s + (c?.packaging === false ? 0 : i.qty);
+  }, 0);
+}
+
+export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true, packaging }: {
+  title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string, packagingQty: number) => void;
+  extra?: React.ReactNode; sendLabel?: string; canSend?: boolean; packaging?: boolean;
 }) {
+  const db = useDb();
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [note, setNote] = useState('');
-  const total = cart.reduce((s, i) => s + i.unitPrice * i.qty, 0);
+  const [pkgManual, setPkgManual] = useState<number | null>(null);
+  const suggested = suggestPackaging(cart, db);
+  const pkgQty = packaging ? pkgManual ?? suggested : 0;
+  const pkgPrice = db.settings.packagingPrice ?? 0.5;
+  const total = cart.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgQty * pkgPrice;
   return (
     <div className="page">
       <div className="section-head">
@@ -88,13 +102,28 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
       </div>
       {extra}
       <OrderBuilder localId={localId} cart={cart} setCart={setCart} />
+      {packaging && (
+        <div className="card packaging">
+          <div className="grow">
+            <b>Costo de empaques</b>
+            <div className="muted small">{money(pkgPrice)} por plato · sugerido: {suggested} {suggested === 1 ? 'plato' : 'platos'} (sin bebidas)</div>
+          </div>
+          <div className="stepper small">
+            <button onClick={() => setPkgManual(Math.max(0, pkgQty - 1))} aria-label="Menos empaques">−</button>
+            <span>{pkgQty}</span>
+            <button onClick={() => setPkgManual(pkgQty + 1)} aria-label="Más empaques">+</button>
+          </div>
+          <b className="pkg-amount">{money(pkgQty * pkgPrice)}</b>
+          {pkgManual !== null && pkgManual !== suggested && <button className="link small" onClick={() => setPkgManual(null)}>Usar sugerido ({suggested})</button>}
+        </div>
+      )}
       <label className="field">
         <span>Nota general del pedido</span>
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opcional" />
+        <input id="order-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opcional" />
       </label>
       <div className="sticky-bar">
         <span className="grow">Cuenta: <b>{money(total)}</b> · {cart.reduce((s, i) => s + i.qty, 0)} ítems</span>
-        <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(cart, note.trim())}>{sendLabel}</button>
+        <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(cart, note.trim(), pkgQty)}>{sendLabel}</button>
       </div>
     </div>
   );

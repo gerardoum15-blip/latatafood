@@ -8,6 +8,7 @@ export const DEFAULT_CREAM_TIERS = [
   { min: 20, free: 6 },
   { min: 30, free: 8 },
   { min: 40, free: 10 },
+  { min: 50, free: 12 },
 ];
 
 const group = (g: Omit<ModifierGroup, 'freeTiers' | 'free' | 'max'> & Partial<Pick<ModifierGroup, 'freeTiers' | 'free' | 'max'>>): ModifierGroup => ({
@@ -107,6 +108,7 @@ export function createSeed(): DB {
     settings: {
       businessName: 'La Tata Food',
       whatsapp: '955093657',
+      packagingPrice: 0.5,
       msgEnCamino: 'Hola {cliente}, soy {driver} de {negocio} 🛵. Ya tengo tu pedido, estoy en camino a tu dirección.',
       msgLlegue: 'Hola {cliente}, ya llegué a tu ubicación 📍. No demores en recoger tu pedido, por favor. Total: {total} ({pago}).',
     },
@@ -131,7 +133,7 @@ export function createSeed(): DB {
       { id: 'c-salchi', name: 'Salchipapas', order: 4 },
       { id: 'c-especiales', name: 'Platos especiales', order: 5 },
       { id: 'c-ensaladas', name: 'Ensaladas', order: 6 },
-      { id: 'c-gaseosas', name: 'Gaseosas y bebidas', order: 7 },
+      { id: 'c-gaseosas', name: 'Gaseosas y bebidas', order: 7, packaging: false },
       { id: 'c-combos', name: 'Combos y promociones', order: 8 },
       { id: 'c-adicionales', name: 'Adicionales', order: 9 },
     ],

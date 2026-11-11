@@ -101,8 +101,8 @@ function DriverCard({ order, available }: { order: Order; available?: boolean })
             onClick={() => { if (st !== 'llego') setDeliveryStatus(order.id, 'llego', user); }}>
             📍 Ya llegué a tu ubicación{st === 'llego' ? ' ✓' : ''}
           </a>
-          {st === 'llego' && (
-            <button className="btn ok block" onClick={() => setDeliveryStatus(order.id, 'entregado', user)}>Confirmar entrega y cobro</button>
+          {(st === 'en_camino' || st === 'llego') && (
+            <button className="btn ok big-ok block" onClick={() => setDeliveryStatus(order.id, 'entregado', user)}>✅ Pedido entregado</button>
           )}
           <p className="muted small">Cada botón abre WhatsApp con el mensaje listo para el cliente.</p>
         </div>

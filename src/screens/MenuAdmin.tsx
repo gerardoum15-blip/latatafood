@@ -230,7 +230,8 @@ function Categories() {
       <ul className="list">
         {cats.map((c, i) => (
           <li key={c.id}>
-            <input className="grow" value={c.name} onChange={(e) => update({ ...c, name: e.target.value })} />
+            <input className="grow" aria-label="Nombre de la categoría" value={c.name} onChange={(e) => update({ ...c, name: e.target.value })} />
+            <label className="check small" title="Si sus platos cuentan para el costo de empaque en delivery"><input type="checkbox" checked={c.packaging !== false} onChange={(e) => update({ ...c, packaging: e.target.checked })} /> Empaque</label>
             <button className="icon-btn" aria-label="Subir" disabled={i === 0} onClick={() => mutate((d) => { const a = d.categories.find((x) => x.id === c.id)!; const b = d.categories.find((x) => x.id === cats[i - 1].id)!; [a.order, b.order] = [b.order, a.order]; })}>↑</button>
             <button className="icon-btn" aria-label="Eliminar categoría" title={db.products.some((p) => p.categoryId === c.id) ? 'Mueve primero sus productos a otra categoría' : 'Eliminar'} disabled={db.products.some((p) => p.categoryId === c.id)} onClick={() => mutate((d) => { d.categories = d.categories.filter((x) => x.id !== c.id); })}>✕</button>
           </li>

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { login, useDb, useSession } from './data/store';
 import { ROLE_LABEL } from './types';
-import { TopBar } from './components/ui';
+import { Tabs, TopBar } from './components/ui';
+import { OrderLog } from './screens/OrderLog';
 import { AdminScreen } from './screens/Admin';
 import { WaiterScreen } from './screens/Waiter';
 import { DeliveryScreen } from './screens/Delivery';
@@ -13,11 +14,25 @@ export default function App() {
   if (!user) return <Login />;
   switch (user.role) {
     case 'admin': return <AdminScreen />;
-    case 'mozo': return <><TopBar /><WaiterScreen /></>;
-    case 'delivery': return <><TopBar /><DeliveryScreen /></>;
-    case 'cocina': return <><TopBar /><KitchenScreen /></>;
-    case 'driver': return <><TopBar /><DriverScreen /></>;
+    case 'mozo': return <RoleShell label="Mesas" main={<WaiterScreen />} />;
+    case 'delivery': return <RoleShell label="Tomar pedido" main={<DeliveryScreen />} />;
+    case 'cocina': return <RoleShell label="Cocina" main={<KitchenScreen />} local={user.localId ?? 'all'} />;
+    case 'driver': return <RoleShell label="Mis entregas" main={<DriverScreen />} />;
   }
+}
+
+/** Pantalla de trabajo + Registro de pedidos (todos ven los estados). */
+function RoleShell({ label, main, local = 'all' }: { label: string; main: ReactNode; local?: string }) {
+  const [tab, setTab] = useState<'main' | 'log'>('main');
+  return (
+    <>
+      <TopBar />
+      <div className="role-tabs">
+        <Tabs value={tab} onChange={setTab} options={[{ value: 'main', label }, { value: 'log', label: 'Registro de pedidos' }]} />
+      </div>
+      {tab === 'main' ? main : <OrderLog defaultLocal={local} />}
+    </>
+  );
 }
 
 function Login() {

@@ -63,15 +63,17 @@ export function DeliveryScreen() {
           )}
         </div>
       }
-      onSend={(items, note) => {
+      packaging
+      onSend={(items, note, packagingQty) => {
         const c = { ...customer, name: customer.name.trim(), phone: customer.phone.trim(), address: customer.address.trim(), mapsUrl: customer.mapsUrl.trim() };
         const input = {
           localId, channel: 'delivery' as const, table: null, customer: c, deliveryFee: 0,
+          packagingQty, packagingPrice: db.settings.packagingPrice ?? 0.5,
           plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note,
         };
         const id = createOrder(input, user);
         const number = getDb().orders.find((o) => o.id === id)?.number ?? 0;
-        setSent({ number, name: c.name, total: orderTotal({ items, deliveryFee: 0 }) });
+        setSent({ number, name: c.name, total: orderTotal({ items, deliveryFee: 0, packagingQty, packagingPrice: db.settings.packagingPrice ?? 0.5 }) });
         setCustomer(EMPTY); setCashWith(''); setPay('efectivo');
       }}
     />

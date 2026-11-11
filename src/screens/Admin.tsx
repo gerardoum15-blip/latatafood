@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { assignDriver, cancelOrder, generateDemoSales, mutate, orderTotal, resetAll, uid, useDb, useSession } from '../data/store';
-import { DELIVERY_LABEL, KITCHEN_LABEL, PAY_LABEL, ROLE_LABEL, type Role, type User } from '../types';
-import { dateTime, money, minutesAgo } from '../lib/format';
+import { generateDemoSales, mutate, orderTotal, resetAll, uid, useDb, useSession } from '../data/store';
+import { PAY_LABEL, ROLE_LABEL, type Role, type User } from '../types';
+import { dateTime, money } from '../lib/format';
 import { periodRange, PERIOD_LABEL, type Period } from '../lib/reports';
 import { LocalPicker } from '../components/shared';
 import { ConfirmButton, Empty, Modal, TopBar } from '../components/ui';
@@ -10,11 +10,12 @@ import { DeliveryScreen } from './Delivery';
 import { KitchenScreen } from './Kitchen';
 import { ReportsScreen } from './Reports';
 import { MenuAdmin } from './MenuAdmin';
+import { OrderLog } from './OrderLog';
 
 type Section = 'monitor' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
 
 const NAV: { key: Section; label: string; icon: string }[] = [
-  { key: 'monitor', label: 'En curso', icon: '📋' },
+  { key: 'monitor', label: 'Pedidos', icon: '📋' },
   { key: 'salon', label: 'Salón', icon: '🍽' },
   { key: 'delivery', label: 'Delivery', icon: '🛵' },
   { key: 'cocina', label: 'Cocina', icon: '👨‍🍳' },
@@ -38,7 +39,7 @@ export function AdminScreen() {
         ))}
       </nav>
       <main>
-        {sec === 'monitor' && <Monitor />}
+        {sec === 'monitor' && <OrderLog admin />}
         {sec === 'salon' && <WaiterScreen />}
         {sec === 'delivery' && <DeliveryScreen />}
         {sec === 'cocina' && <KitchenScreen />}
@@ -48,48 +49,6 @@ export function AdminScreen() {
         {sec === 'usuarios' && <Users />}
         {sec === 'ajustes' && <SettingsScreen />}
       </main>
-    </div>
-  );
-}
-
-function Monitor() {
-  const db = useDb();
-  const me = useSession()!;
-  const drivers = db.users.filter((u) => u.role === 'driver' && u.active);
-  const [localId, setLocalId] = useState('all');
-  const open = db.orders.filter((o) => !o.closed && (localId === 'all' || o.localId === localId)).sort((a, b) => a.createdAt - b.createdAt);
-  return (
-    <div className="page wide">
-      <div className="section-head"><h2>Pedidos en curso</h2><LocalPicker value={localId} onChange={setLocalId} allowAll /></div>
-      {open.length === 0 && <Empty>No hay pedidos abiertos.</Empty>}
-      <div className="table-wrap">
-        {open.length > 0 && (
-          <table className="data">
-            <thead><tr><th>Pedido</th><th className="hide-sm">Local</th><th>Cocina</th><th>Servicio</th><th className="num">Min</th><th className="num">Total</th><th /></tr></thead>
-            <tbody>
-              {open.map((o) => (
-                <tr key={o.id}>
-                  <td><b>#{o.number}</b> {o.channel === 'salon' ? `Mesa ${o.table}` : `🛵 ${o.customer?.name}`}<div className="muted small">{o.createdByName}</div></td>
-                  <td className="small hide-sm">{db.locales.find((l) => l.id === o.localId)?.name}</td>
-                  <td><span className={`status s-${o.kitchenStatus}`}>{KITCHEN_LABEL[o.kitchenStatus]}</span></td>
-                  <td className="small">{o.channel === 'delivery' ? (
-                    <>
-                      {o.deliveryStatus ? DELIVERY_LABEL[o.deliveryStatus] : ''}
-                      <select aria-label="Driver" value={o.driverId ?? ''} onChange={(e) => assignDriver(o.id, e.target.value || null, me)}>
-                        <option value="">Sin driver</option>
-                        {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                      </select>
-                    </>
-                  ) : o.served ? 'Servido' : 'En mesa'}</td>
-                  <td className="num">{minutesAgo(o.createdAt)}</td>
-                  <td className="num">{money(orderTotal(o))}</td>
-                  <td><ConfirmButton className="btn small ghost danger" label="Anular" title={`Anular pedido #${o.number}`} message="El pedido no contará en las ventas." reason confirmLabel="Anular pedido" onConfirm={(r) => cancelOrder(o.id, r, me)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
     </div>
   );
 }
@@ -233,6 +192,7 @@ function SettingsScreen() {
       <div className="section-head"><h2>Ajustes</h2></div>
       <div className="card">
         <label className="field"><span>Nombre del restaurante</span><input id="set-name" value={s.businessName} onChange={(e) => setS({ businessName: e.target.value })} /></label>
+        <label className="field"><span>Costo de empaque por plato (S/)</span><input id="set-pkg" type="number" inputMode="decimal" step="0.1" value={s.packagingPrice ?? 0.5} onChange={(e) => setS({ packagingPrice: Number(e.target.value) })} /></label>
         <label className="field"><span>WhatsApp de pedidos</span><input id="set-wa" type="tel" value={s.whatsapp} onChange={(e) => setS({ whatsapp: e.target.value })} /></label>
       </div>
       <div className="card">

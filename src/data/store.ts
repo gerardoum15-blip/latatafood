@@ -11,7 +11,7 @@ import { createSeed } from './seed';
  * después por una base de datos en la nube (Supabase) sin tocar las pantallas.
  */
 
-const KEY = 'pos-restaurante-db-v2';
+const KEY = 'pos-restaurante-db-v3';
 const SESSION_KEY = 'pos-restaurante-session';
 
 function safeGet(key: string): string | null {
@@ -109,8 +109,11 @@ export function logout() {
 export const orderSubtotal = (o: Pick<Order, 'items'>) =>
   o.items.reduce((s, i) => s + i.unitPrice * i.qty, 0);
 
-export const orderTotal = (o: Pick<Order, 'items' | 'deliveryFee'>) =>
-  orderSubtotal(o) + (o.deliveryFee || 0);
+export const packagingTotal = (o: Pick<Order, 'packagingQty' | 'packagingPrice'>) =>
+  (o.packagingQty || 0) * (o.packagingPrice || 0);
+
+export const orderTotal = (o: Pick<Order, 'items' | 'deliveryFee' | 'packagingQty' | 'packagingPrice'>) =>
+  orderSubtotal(o) + (o.deliveryFee || 0) + packagingTotal(o);
 
 function event(user: User, label: string) {
   return { label, at: Date.now(), userId: user.id, userName: user.name };
@@ -122,6 +125,8 @@ export interface NewOrderInput {
   table: number | null;
   customer: Customer | null;
   deliveryFee: number;
+  packagingQty?: number;
+  packagingPrice?: number;
   plannedPay: PayMethod | null;
   cashWith: number | null;
   driverId: string | null;

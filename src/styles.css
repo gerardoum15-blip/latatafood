@@ -337,3 +337,52 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .btn.big { min-height: 56px; font-size: 1rem; text-align: left; justify-content: flex-start; padding: 12px 16px; }
 .btn.wa.done { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 .tier-row { display: grid; grid-template-columns: 1fr 1fr 36px; gap: 8px; align-items: center; }
+.packaging { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pkg-amount { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+.btn.big-ok { min-height: 56px; font-size: 1.05rem; }
+
+/* Colores de estado del pedido */
+:root {
+  --st-nuevo: #b91c1c; --st-nuevo-soft: #fee2e2;
+  --st-recibido: #b45309; --st-recibido-soft: #fef3c7;
+  --st-preparando: #1d4ed8; --st-preparando-soft: #dbeafe;
+  --st-listo: #0f766e; --st-listo-soft: #ccfbf1;
+  --st-reparto: #7e22ce; --st-reparto-soft: #f3e8ff;
+  --st-entregado: #15803d; --st-entregado-soft: #dcfce7;
+  --st-anulado: #6b7280; --st-anulado-soft: #f3f4f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --st-nuevo: #f87171; --st-nuevo-soft: #3d1717;
+    --st-recibido: #fbbf24; --st-recibido-soft: #362a0d;
+    --st-preparando: #93c5fd; --st-preparando-soft: #172a4a;
+    --st-listo: #5eead4; --st-listo-soft: #0f2f2b;
+    --st-reparto: #d8b4fe; --st-reparto-soft: #2e1a45;
+    --st-entregado: #4ade80; --st-entregado-soft: #12301d;
+    --st-anulado: #9ca3af; --st-anulado-soft: #26262b;
+  }
+}
+:root[data-theme="dark"] {
+  --st-nuevo: #f87171; --st-nuevo-soft: #3d1717;
+  --st-recibido: #fbbf24; --st-recibido-soft: #362a0d;
+  --st-preparando: #93c5fd; --st-preparando-soft: #172a4a;
+  --st-listo: #5eead4; --st-listo-soft: #0f2f2b;
+  --st-reparto: #d8b4fe; --st-reparto-soft: #2e1a45;
+  --st-entregado: #4ade80; --st-entregado-soft: #12301d;
+  --st-anulado: #9ca3af; --st-anulado-soft: #26262b;
+}
+.st-nuevo { --st: var(--st-nuevo); --st-soft: var(--st-nuevo-soft); }
+.st-recibido { --st: var(--st-recibido); --st-soft: var(--st-recibido-soft); }
+.st-preparando { --st: var(--st-preparando); --st-soft: var(--st-preparando-soft); }
+.st-listo { --st: var(--st-listo); --st-soft: var(--st-listo-soft); }
+.st-reparto { --st: var(--st-reparto); --st-soft: var(--st-reparto-soft); }
+.st-entregado { --st: var(--st-entregado); --st-soft: var(--st-entregado-soft); }
+.st-anulado { --st: var(--st-anulado); --st-soft: var(--st-anulado-soft); }
+.log-ticket { display: flex; flex-direction: column; gap: 6px; border-left: 6px solid var(--st); background: linear-gradient(90deg, var(--st-soft), var(--surface) 70%); }
+.log-ticket.st-anulado { opacity: 0.7; }
+.stage-badge { background: var(--st); color: var(--surface); font-weight: 700; font-size: 0.78rem; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.stage-chip { display: inline-flex; align-items: center; gap: 6px; }
+.stage-chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--st); }
+.stage-chip.active { background: var(--st); color: var(--surface); border-color: var(--st); }
+.stage-chip.active .dot { background: var(--surface); }
+.role-tabs { padding-block: 8px 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1400px; margin: 0 auto; }

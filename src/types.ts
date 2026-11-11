@@ -28,6 +28,8 @@ export interface Category {
   id: string;
   name: string;
   order: number;
+  /** Si sus platos llevan empaque en delivery (falso para bebidas). */
+  packaging?: boolean;
 }
 
 export interface ModifierOption {
@@ -152,6 +154,9 @@ export interface Order {
   table: number | null;
   customer: Customer | null;
   deliveryFee: number;
+  /** Cantidad de empaques cobrados y precio de cada uno. */
+  packagingQty?: number;
+  packagingPrice?: number;
   /** Delivery: forma de pago acordada con el cliente. */
   plannedPay: PayMethod | null;
   cashWith: number | null;
@@ -177,6 +182,7 @@ export interface Order {
 export interface Settings {
   businessName: string;
   whatsapp: string;
+  packagingPrice: number;
   msgEnCamino: string;
   msgLlegue: string;
 }

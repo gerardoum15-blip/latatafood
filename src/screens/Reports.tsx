@@ -58,7 +58,7 @@ export function ReportsScreen() {
         <div className="kpi"><span>Tickets</span><b>{rep.count}</b></div>
         <div className="kpi"><span>Ticket promedio</span><b>{money(rep.avgTicket)}</b></div>
         <div className="kpi"><span>Salón</span><b>{money(rep.salon.total)}</b><small>{rep.salon.count} tickets</small></div>
-        <div className="kpi"><span>Delivery</span><b>{money(rep.delivery.total)}</b><small>{rep.delivery.count} pedidos · envíos {money(rep.deliveryFees)}</small></div>
+        <div className="kpi"><span>Delivery</span><b>{money(rep.delivery.total)}</b><small>{rep.delivery.count} pedidos · empaques {money(rep.packaging)}</small></div>
         <div className="kpi"><span>Tiempo cocina</span><b>{rep.avgKitchenMin !== null ? fmtMinutes(rep.avgKitchenMin) : '—'}</b><small>promedio hasta "Listo"</small></div>
         {rep.avgDeliveryMin !== null && <div className="kpi"><span>Tiempo de entrega</span><b>{fmtMinutes(rep.avgDeliveryMin)}</b><small>de "Listo" a "Entregado"</small></div>}
       </div>
