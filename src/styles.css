@@ -386,3 +386,46 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .stage-chip.active { background: var(--st); color: var(--surface); border-color: var(--st); }
 .stage-chip.active .dot { background: var(--surface); }
 .role-tabs { padding-block: 8px 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1400px; margin: 0 auto; }
+.cream-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 2px dashed var(--border); }
+.cream-panel h3 { margin: 0; }
+
+/* Carta de clientes: pizarra con amarillo y rojo de la marca (igual en ambos temas) */
+:root { --chalk: #1e1d1b; --chalk-2: #2b2926; --chalk-ink: #f2efe8; --chalk-muted: #b9b3a8; --tata-yellow: #f5c518; --tata-red: #e0312b; }
+.customer { min-height: 100dvh; background: var(--bg); padding-bottom: 96px; }
+.c-hero {
+  background: var(--chalk); color: var(--chalk-ink); text-align: center;
+  padding-block: 28px 20px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+}
+.c-hero p { margin: 0; color: var(--chalk-muted); }
+.c-hero b { color: var(--chalk-ink); }
+.c-brand { font-weight: 900; font-size: clamp(2.2rem, 9vw, 3.2rem); letter-spacing: 0.02em; line-height: 1; text-transform: uppercase; }
+.c-brand-a { color: var(--tata-yellow); }
+.c-brand-b { color: var(--tata-red); }
+.c-link { background: none; border: 0; color: var(--tata-yellow); text-decoration: underline; cursor: pointer; padding: 0; font: inherit; }
+.c-notes { list-style: none; margin: 4px 0 0; padding: 0; font-size: 0.8rem; color: var(--chalk-muted); display: flex; flex-direction: column; gap: 2px; }
+.c-cats {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 15; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  background: var(--chalk-2); padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.c-cats::-webkit-scrollbar { display: none; }
+.c-cats a { flex: none; color: var(--chalk-ink); text-decoration: none; font-weight: 700; font-size: 0.88rem; padding: 6px 12px; border-radius: 999px; border: 1px solid #4a4640; }
+.c-cats a:focus-visible { outline: 2px solid var(--tata-yellow); }
+.c-menu { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; padding-block: 20px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.c-section { scroll-margin-top: 64px; display: flex; flex-direction: column; gap: 10px; }
+.c-section > h2 { text-transform: uppercase; letter-spacing: 0.04em; font-size: 1.15rem; border-bottom: 3px solid var(--tata-yellow); padding-bottom: 6px; text-wrap: balance; }
+.c-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+.c-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 10px; justify-content: space-between; }
+.c-item h3 { margin: 0; font-size: 1.02rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.c-item p { margin: 4px 0 0; color: var(--muted); font-size: 0.86rem; line-height: 1.4; }
+.c-badge { background: var(--tata-red); color: #fff; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
+.c-item-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.c-item-foot b { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.c-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--border);
+  padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.c-bar .btn { min-height: 52px; font-size: 1.02rem; }
+.c-welcome { max-width: 420px; width: calc(100% - 32px); margin: 24px auto; display: flex; flex-direction: column; gap: 12px; }
+.customer-entry { background: var(--chalk); color: var(--tata-yellow); border-color: var(--chalk); }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { uid, useDb } from '../data/store';
-import type { ModifierGroup, OrderItem, Product, SelectedModifier } from '../types';
+import type { DB, ModifierGroup, OrderItem, Product, SelectedModifier } from '../types';
 import { money } from '../lib/format';
 import { ItemLines, Modal } from './ui';
 
@@ -17,9 +17,9 @@ export function freeFor(group: ModifierGroup, price: number): number {
 }
 
 /** Calcula el precio de los modificadores elegidos, respetando las unidades gratis. */
-function priceMods(group: ModifierGroup, picks: Record<string, number>, basePrice: number): SelectedModifier[] {
+function priceMods(group: ModifierGroup, picks: Record<string, number>, free: number): SelectedModifier[] {
   const out: SelectedModifier[] = [];
-  let freeLeft = freeFor(group, basePrice);
+  let freeLeft = free;
   for (const o of group.options) {
     const q = picks[o.id] ?? 0;
     if (q <= 0) continue;
@@ -30,12 +30,83 @@ function priceMods(group: ModifierGroup, picks: Record<string, number>, basePric
   return out;
 }
 
+export type CreamPicks = Record<string, Record<string, number>>;
+export const CREAM_ITEM_ID = 'extras:cremas';
+
+const hasItemGroups = (db: DB, p: Product) => p.groupIds.some((id) => { const g = db.groups.find((x) => x.id === id); return g && !g.orderLevel; });
+
+/** Grupos que se eligen al final (cremas, salsas) y cuántas unidades gratis suman los platos del pedido. */
+export function orderGroups(db: DB, cart: OrderItem[]): { group: ModifierGroup; free: number }[] {
+  const map = new Map<string, { group: ModifierGroup; free: number }>();
+  for (const it of cart) {
+    const p = db.products.find((x) => x.id === it.productId);
+    if (!p) continue;
+    for (const gid of p.groupIds) {
+      const g = db.groups.find((x) => x.id === gid);
+      if (!g?.orderLevel) continue;
+      const e = map.get(gid) ?? { group: g, free: 0 };
+      e.free += freeFor(g, it.basePrice) * it.qty;
+      map.set(gid, e);
+    }
+  }
+  return db.groups.filter((g) => map.has(g.id)).map((g) => map.get(g.id)!);
+}
+
+/** Línea "Cremas y salsas" del pedido, con lo que se cobra por encima de lo gratis. */
+export function buildCreamItem(db: DB, cart: OrderItem[], picks: CreamPicks): OrderItem | null {
+  const mods = orderGroups(db, cart).flatMap(({ group, free }) => priceMods(group, picks[group.id] ?? {}, free));
+  if (!mods.length) return null;
+  const price = mods.reduce((s, m) => s + m.price, 0);
+  return { id: uid('i'), productId: CREAM_ITEM_ID, name: 'Cremas y salsas', basePrice: 0, unitPrice: price, qty: 1, modifiers: mods, note: '', round: 1 };
+}
+
+export function CreamPanel({ cart, picks, setPicks }: { cart: OrderItem[]; picks: CreamPicks; setPicks: (p: CreamPicks) => void }) {
+  const db = useDb();
+  const gs = orderGroups(db, cart);
+  if (!gs.length) return null;
+  const item = buildCreamItem(db, cart, picks);
+  const set = (gid: string, oid: string, v: number) => setPicks({ ...picks, [gid]: { ...(picks[gid] ?? {}), [oid]: Math.max(0, v) } });
+  return (
+    <div className="cream-panel">
+      <h3>Cremas y salsas del pedido</h3>
+      <p className="muted small">Se eligen una sola vez para todos los platos.</p>
+      {gs.map(({ group, free }) => {
+        const used = Object.values(picks[group.id] ?? {}).reduce((s, n) => s + n, 0);
+        return (
+          <fieldset key={group.id} className="mod-group">
+            <legend>
+              {group.name}
+              {free > 0 && <span className={used > free ? 'pill' : 'pill ok'}>{free} gratis · usadas {Math.min(used, free)}{used > free ? ` · +${used - free} extra` : ''}</span>}
+            </legend>
+            {group.options.map((o) => {
+              const val = picks[group.id]?.[o.id] ?? 0;
+              return (
+                <div key={o.id} className="mod-opt">
+                  <span className="grow">{o.name}{o.price > 0 && <span className="muted"> +{money(o.price)}{free > 0 ? ' c/u extra' : ' c/u'}</span>}</span>
+                  <div className="stepper small">
+                    <button onClick={() => set(group.id, o.id, val - 1)} disabled={val === 0} aria-label={`Quitar ${o.name}`}>−</button>
+                    <span>{val}</span>
+                    <button onClick={() => set(group.id, o.id, val + 1)} aria-label={`Agregar ${o.name}`}>+</button>
+                  </div>
+                </div>
+              );
+            })}
+          </fieldset>
+        );
+      })}
+      {item && item.unitPrice > 0 && <div className="total-row"><span>Cremas y salsas extra</span><b>{money(item.unitPrice)}</b></div>}
+    </div>
+  );
+}
+
 export function ProductCustomizer({ product, localId, onClose, onAdd }: {
   product: Product; localId: string; onClose: () => void; onAdd: (item: OrderItem) => void;
 }) {
   const db = useDb();
-  const groups = product.groupIds.map((id) => db.groups.find((g) => g.id === id)).filter((g): g is ModifierGroup => !!g);
-  const [picks, setPicks] = useState<Record<string, Record<string, number>>>({});
+  const groups = product.groupIds.map((id) => db.groups.find((g) => g.id === id)).filter((g): g is ModifierGroup => !!g && !g.orderLevel);
+  const [picks, setPicks] = useState<Record<string, Record<string, number>>>(() => Object.fromEntries(
+    groups.filter((g) => g.defaultOptionId && g.options.some((o) => o.id === g.defaultOptionId)).map((g) => [g.id, { [g.defaultOptionId!]: 1 }]),
+  ));
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState('');
   const [tried, setTried] = useState(false);
@@ -58,7 +129,7 @@ export function ProductCustomizer({ product, localId, onClose, onAdd }: {
 
   const missing = groups.filter((g) => g.required && groupCount(g) === 0);
   const base = productPrice(product, localId);
-  const mods = groups.flatMap((g) => priceMods(g, picks[g.id] ?? {}, base));
+  const mods = groups.flatMap((g) => priceMods(g, picks[g.id] ?? {}, freeFor(g, base)));
   const unit = base + mods.reduce((s, m) => s + m.price, 0);
 
   const add = () => {
@@ -163,7 +234,9 @@ function CustomItemModal({ onClose, onAdd }: { onClose: () => void; onAdd: (item
 }
 
 /** Carta ordenada por área + carrito. */
-export function OrderBuilder({ localId, cart, setCart }: { localId: string; cart: OrderItem[]; setCart: (c: OrderItem[]) => void }) {
+export function OrderBuilder({ localId, cart, setCart, picks, setPicks }: {
+  localId: string; cart: OrderItem[]; setCart: (c: OrderItem[]) => void; picks: CreamPicks; setPicks: (p: CreamPicks) => void;
+}) {
   const db = useDb();
   const cats = [...db.categories].sort((a, b) => a.order - b.order);
   const [cat, setCat] = useState<string>('all');
@@ -176,7 +249,7 @@ export function OrderBuilder({ localId, cart, setCart }: { localId: string; cart
     && (!q || p.name.toLowerCase().includes(q.toLowerCase()))), [db.products, cat, q]);
 
   const addDirect = (p: Product) => {
-    if (p.groupIds.length) { setEditing(p); return; }
+    if (hasItemGroups(db, p)) { setEditing(p); return; }
     const price = productPrice(p, localId);
     const same = cart.find((i) => i.productId === p.id && i.modifiers.length === 0 && !i.note);
     if (same) setCart(cart.map((i) => (i === same ? { ...i, qty: i.qty + 1 } : i)));
@@ -206,7 +279,7 @@ export function OrderBuilder({ localId, cart, setCart }: { localId: string; cart
                   <button key={p.id} className="product-card" onClick={() => addDirect(p)}>
                     <span className="pc-name">{p.name}</span>
                     <span className="pc-price">{money(productPrice(p, localId))}</span>
-                    {p.groupIds.length > 0 && <span className="pc-tag">Personalizable</span>}
+                    {hasItemGroups(db, p) && <span className="pc-tag">Personalizable</span>}
                   </button>
                 ))}
               </div>
@@ -236,6 +309,7 @@ export function OrderBuilder({ localId, cart, setCart }: { localId: string; cart
             ))}
           </ul>
         )}
+        <CreamPanel cart={cart} picks={picks} setPicks={setPicks} />
       </div>
       {editing && (
         <ProductCustomizer

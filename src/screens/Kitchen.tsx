@@ -6,8 +6,8 @@ import { LocalPicker, useWorkLocal } from '../components/shared';
 import { Empty, ItemLines, useTick } from '../components/ui';
 
 const NEXT: Record<KitchenStatus, { to: KitchenStatus; label: string } | null> = {
-  enviado: { to: 'recibido', label: 'Recibido' },
-  recibido: { to: 'preparando', label: 'En preparación' },
+  enviado: { to: 'preparando', label: 'Recibido · En preparación' },
+  recibido: { to: 'listo', label: '¡Listo!' },
   preparando: { to: 'listo', label: '¡Listo!' },
   listo: null,
 };
@@ -47,7 +47,6 @@ export function KitchenScreen() {
 
   const cols: { key: KitchenStatus; title: string }[] = [
     { key: 'enviado', title: 'Nuevos' },
-    { key: 'recibido', title: 'Recibidos' },
     { key: 'preparando', title: 'En preparación' },
     { key: 'listo', title: 'Listos' },
   ];
@@ -61,7 +60,7 @@ export function KitchenScreen() {
       {orders.length === 0 && <Empty>Sin pedidos pendientes 👌</Empty>}
       <div className="kanban">
         {cols.map((c) => {
-          const list = orders.filter((o) => o.kitchenStatus === c.key);
+          const list = orders.filter((o) => (o.kitchenStatus === 'recibido' ? 'preparando' : o.kitchenStatus) === c.key);
           return (
             <section key={c.key} className={`kcol k-${c.key}`}>
               <h3>{c.title} <span className="count">{list.length}</span></h3>

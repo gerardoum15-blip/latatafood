@@ -84,7 +84,9 @@ function ProductForm({ initial, onClose }: { initial: Product; onClose: () => vo
         {p.id && <ConfirmButton label="Eliminar" title="Eliminar producto" message={`Se quitará “${p.name}” de la carta. Los reportes de ventas anteriores se conservan.`} confirmLabel="Eliminar" onConfirm={() => { mutate((d) => { d.products = d.products.filter((x) => x.id !== p.id); }); onClose(); }} />}
         <button className="btn primary grow" onClick={save}>Guardar</button>
       </div>}>
-      <label className="field"><span>Nombre</span><input value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} /></label>
+      <label className="field"><span>Nombre</span><input id="p-name" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} /></label>
+      <label className="field"><span>Qué incluye (lo ve el cliente en la carta)</span><textarea id="p-desc" rows={2} value={p.description ?? ''} onChange={(e) => setP({ ...p, description: e.target.value })} placeholder="Ej. Hotdog + chorizo + huevo frito" /></label>
+      <label className="field"><span>Etiqueta destacada (opcional)</span><input id="p-badge" value={p.badge ?? ''} onChange={(e) => setP({ ...p, badge: e.target.value })} placeholder="Ej. La más vendida" /></label>
       <label className="field"><span>Categoría</span>
         <select value={p.categoryId} onChange={(e) => setP({ ...p, categoryId: e.target.value })}>
           {db.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -138,7 +140,7 @@ function Groups() {
           <div key={g.id} className="card">
             <div className="row between"><b>{g.name}</b><button className="btn small" onClick={() => setEdit(g)}>Editar</button></div>
             <div className="muted small">
-              {KIND_LABEL[g.kind]} · {g.required ? 'obligatorio' : 'opcional'}
+              {KIND_LABEL[g.kind]} · {g.required ? 'obligatorio' : 'opcional'}{g.orderLevel ? ' · al final del pedido' : ''}
               {g.kind !== 'single' && g.max > 0 ? ` · máx. ${g.max}` : ''}{g.kind === 'qty' && g.freeTiers?.length ? ` · gratis según precio: ${[...g.freeTiers].sort((a, b) => a.min - b.min).map((t) => `${t.free} desde ${money(t.min)}`).join(', ')}` : g.kind === 'qty' && g.free > 0 ? ` · ${g.free} gratis` : ''}
               {' · '}usado en {db.products.filter((p) => p.groupIds.includes(g.id)).length} productos
             </div>
@@ -180,6 +182,15 @@ function GroupForm({ initial, onClose }: { initial: ModifierGroup; onClose: () =
         </select>
       </label>
       <label className="check"><input type="checkbox" checked={g.required} onChange={(e) => setG({ ...g, required: e.target.checked })} /> Obligatorio (el mozo debe elegir)</label>
+      <label className="check"><input type="checkbox" checked={!!g.orderLevel} onChange={(e) => setG({ ...g, orderLevel: e.target.checked })} /> Se elige al final del pedido, para todos los platos (como las cremas)</label>
+      {g.kind === 'single' && (
+        <label className="field"><span>Opción marcada por defecto</span>
+          <select id="g-default" value={g.defaultOptionId ?? ''} onChange={(e) => setG({ ...g, defaultOptionId: e.target.value || undefined })}>
+            <option value="">Ninguna (el mozo elige)</option>
+            {g.options.filter((o) => o.name.trim()).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </label>
+      )}
       {g.kind !== 'single' && (
         <label className="field"><span>Máximo total (0 = sin límite)</span><input type="number" inputMode="numeric" value={g.max} onChange={(e) => setG({ ...g, max: Number(e.target.value) })} /></label>
       )}

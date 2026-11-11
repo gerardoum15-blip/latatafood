@@ -192,6 +192,7 @@ function SettingsScreen() {
       <div className="section-head"><h2>Ajustes</h2></div>
       <div className="card">
         <label className="field"><span>Nombre del restaurante</span><input id="set-name" value={s.businessName} onChange={(e) => setS({ businessName: e.target.value })} /></label>
+        <div className="field"><span>Enlace de la carta para clientes</span><a className="btn small" href="#carta">Abrir carta de clientes</a><span className="muted small">Comparte la dirección de la app terminada en <b>#carta</b>. Los clientes no necesitan PIN.</span></div>
         <label className="field"><span>Costo de empaque por plato (S/)</span><input id="set-pkg" type="number" inputMode="decimal" step="0.1" value={s.packagingPrice ?? 0.5} onChange={(e) => setS({ packagingPrice: Number(e.target.value) })} /></label>
         <label className="field"><span>WhatsApp de pedidos</span><input id="set-wa" type="tel" value={s.whatsapp} onChange={(e) => setS({ whatsapp: e.target.value })} /></label>
       </div>

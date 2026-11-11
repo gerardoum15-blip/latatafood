@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { addItems, cancelOrder, createOrder, markServed, orderTotal, payOrder, useDb, useSession } from '../data/store';
 import { KITCHEN_LABEL, type Order, type OrderItem } from '../types';
 import { money, minutesAgo, time } from '../lib/format';
-import { OrderBuilder } from '../components/OrderBuilder';
+import { buildCreamItem, OrderBuilder, type CreamPicks } from '../components/OrderBuilder';
 import { LocalPicker, PaymentModal, useWorkLocal } from '../components/shared';
 import { ConfirmButton, ItemLines, Timeline, useTick } from '../components/ui';
 
@@ -76,6 +76,7 @@ export function WaiterScreen() {
 /** Platos que llevan empaque: todo menos las categorías marcadas sin empaque (bebidas). */
 export function suggestPackaging(items: OrderItem[], db: ReturnType<typeof useDb>) {
   return items.reduce((s, i) => {
+    if (i.productId.startsWith('extras:')) return s;
     const p = db.products.find((x) => x.id === i.productId);
     const c = db.categories.find((x) => x.id === p?.categoryId);
     return s + (c?.packaging === false ? 0 : i.qty);
@@ -88,12 +89,15 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
 }) {
   const db = useDb();
   const [cart, setCart] = useState<OrderItem[]>([]);
+  const [picks, setPicks] = useState<CreamPicks>({});
+  const creamItem = buildCreamItem(db, cart, picks);
+  const items = creamItem ? [...cart, creamItem] : cart;
   const [note, setNote] = useState('');
   const [pkgManual, setPkgManual] = useState<number | null>(null);
   const suggested = suggestPackaging(cart, db);
   const pkgQty = packaging ? pkgManual ?? suggested : 0;
   const pkgPrice = db.settings.packagingPrice ?? 0.5;
-  const total = cart.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgQty * pkgPrice;
+  const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgQty * pkgPrice;
   return (
     <div className="page">
       <div className="section-head">
@@ -101,7 +105,7 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
         <h2>{title}</h2>
       </div>
       {extra}
-      <OrderBuilder localId={localId} cart={cart} setCart={setCart} />
+      <OrderBuilder localId={localId} cart={cart} setCart={setCart} picks={picks} setPicks={setPicks} />
       {packaging && (
         <div className="card packaging">
           <div className="grow">
@@ -123,7 +127,7 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
       </label>
       <div className="sticky-bar">
         <span className="grow">Cuenta: <b>{money(total)}</b> · {cart.reduce((s, i) => s + i.qty, 0)} ítems</span>
-        <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(cart, note.trim(), pkgQty)}>{sendLabel}</button>
+        <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(items, note.trim(), pkgQty)}>{sendLabel}</button>
       </div>
     </div>
   );

@@ -59,6 +59,10 @@ export interface ModifierGroup {
    * se usa la fila con el mayor `min` que sea <= precio del plato.
    */
   freeTiers: { min: number; free: number }[];
+  /** Se elige una sola vez al final del pedido, para todos los platos (ej. cremas). */
+  orderLevel?: boolean;
+  /** Opción marcada por defecto (ej. "Sin arroz"). */
+  defaultOptionId?: string;
   options: ModifierOption[];
 }
 
@@ -71,6 +75,10 @@ export interface Product {
   localPrices: Record<string, number>;
   groupIds: string[];
   active: boolean;
+  /** Lo que incluye el plato (se muestra en la carta del cliente). */
+  description?: string;
+  /** Etiqueta destacada, ej. "La más vendida". */
+  badge?: string;
 }
 
 export interface SelectedModifier {
@@ -101,7 +109,7 @@ export type DeliveryStatus = 'pendiente' | 'en_camino' | 'llego' | 'entregado';
 
 export const KITCHEN_LABEL: Record<KitchenStatus, string> = {
   enviado: 'Enviado a cocina',
-  recibido: 'Recibido',
+  recibido: 'En preparación',
   preparando: 'En preparación',
   listo: 'Listo',
 };

@@ -89,6 +89,7 @@ export function buildReport(db: DB, f: ReportFilter): Report {
   const orders = filterSales(db, f);
   const catName = (pid: string) => {
     if (pid.startsWith('custom:')) return 'Plato momentáneo';
+    if (pid.startsWith('extras:')) return 'Cremas y salsas';
     const p = db.products.find((x) => x.id === pid);
     return db.categories.find((c) => c.id === p?.categoryId)?.name ?? '—';
   };

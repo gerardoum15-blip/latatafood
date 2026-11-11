@@ -1,14 +1,13 @@
 import type { Order } from '../types';
 
 /** Estado general del pedido, el mismo para todos los usuarios. */
-export type Stage = 'nuevo' | 'recibido' | 'preparando' | 'listo' | 'reparto' | 'entregado' | 'anulado';
+export type Stage = 'nuevo' | 'preparando' | 'listo' | 'reparto' | 'entregado' | 'anulado';
 
-export const STAGES: Stage[] = ['nuevo', 'recibido', 'preparando', 'listo', 'reparto', 'entregado', 'anulado'];
+export const STAGES: Stage[] = ['nuevo', 'preparando', 'listo', 'reparto', 'entregado', 'anulado'];
 
 export const STAGE_LABEL: Record<Stage, string> = {
   nuevo: 'Nuevo',
-  recibido: 'Recibido',
-  preparando: 'En preparación',
+  preparando: 'Recibido · En preparación',
   listo: 'Listo',
   reparto: 'En reparto',
   entregado: 'Entregado',
@@ -25,7 +24,7 @@ export function orderStage(o: Order): Stage {
   }
   switch (o.kitchenStatus) {
     case 'enviado': return 'nuevo';
-    case 'recibido': return 'recibido';
+    case 'recibido': return 'preparando';
     case 'preparando': return 'preparando';
     case 'listo': return 'listo';
   }

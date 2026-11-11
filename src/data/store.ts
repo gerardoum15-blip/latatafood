@@ -11,7 +11,7 @@ import { createSeed } from './seed';
  * después por una base de datos en la nube (Supabase) sin tocar las pantallas.
  */
 
-const KEY = 'pos-restaurante-db-v3';
+const KEY = 'pos-restaurante-db-v4';
 const SESSION_KEY = 'pos-restaurante-session';
 
 function safeGet(key: string): string | null {

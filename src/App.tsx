@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { login, useDb, useSession } from './data/store';
 import { ROLE_LABEL } from './types';
 import { Tabs, TopBar } from './components/ui';
@@ -8,9 +8,22 @@ import { WaiterScreen } from './screens/Waiter';
 import { DeliveryScreen } from './screens/Delivery';
 import { KitchenScreen } from './screens/Kitchen';
 import { DriverScreen } from './screens/Driver';
+import { CustomerApp } from './screens/Customer';
+
+function useHash() {
+  const [h, setH] = useState(() => (typeof location !== 'undefined' ? location.hash : ''));
+  useEffect(() => {
+    const on = () => setH(location.hash);
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  return h;
+}
 
 export default function App() {
   const user = useSession();
+  const hash = useHash();
+  if (hash === '#carta') return <CustomerApp />;
   if (!user) return <Login />;
   switch (user.role) {
     case 'admin': return <AdminScreen />;
@@ -65,6 +78,7 @@ function Login() {
           <button onClick={() => press('0')}>0</button>
           <button onClick={() => setPin(pin.slice(0, -1))} aria-label="Borrar">⌫</button>
         </div>
+        <a className="btn block customer-entry" href="#carta">🍗 Soy cliente · Ver la carta y pedir</a>
         <details className="demo-users">
           <summary>Usuarios de prueba</summary>
           <ul>
