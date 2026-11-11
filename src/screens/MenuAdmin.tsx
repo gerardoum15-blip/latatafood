@@ -132,14 +132,14 @@ function Groups() {
   return (
     <>
       <p className="muted">Crea grupos como “Cremas”, “Arroz”, “Salsa de alitas” y asígnalos a los productos que los usan.</p>
-      <button className="btn primary" onClick={() => setEdit({ id: '', name: '', kind: 'single', required: true, max: 1, free: 0, options: [] })}>+ Nueva personalización</button>
+      <button className="btn primary" onClick={() => setEdit({ id: '', name: '', kind: 'single', required: true, max: 1, free: 0, freeTiers: [], options: [] })}>+ Nueva personalización</button>
       <div className="cards">
         {db.groups.map((g) => (
           <div key={g.id} className="card">
             <div className="row between"><b>{g.name}</b><button className="btn small" onClick={() => setEdit(g)}>Editar</button></div>
             <div className="muted small">
               {KIND_LABEL[g.kind]} · {g.required ? 'obligatorio' : 'opcional'}
-              {g.kind !== 'single' && g.max > 0 ? ` · máx. ${g.max}` : ''}{g.kind === 'qty' && g.free > 0 ? ` · ${g.free} gratis` : ''}
+              {g.kind !== 'single' && g.max > 0 ? ` · máx. ${g.max}` : ''}{g.kind === 'qty' && g.freeTiers?.length ? ` · gratis según precio: ${[...g.freeTiers].sort((a, b) => a.min - b.min).map((t) => `${t.free} desde ${money(t.min)}`).join(', ')}` : g.kind === 'qty' && g.free > 0 ? ` · ${g.free} gratis` : ''}
               {' · '}usado en {db.products.filter((p) => p.groupIds.includes(g.id)).length} productos
             </div>
             <div className="small">{g.options.map((o) => o.name + (o.price ? ` (+${money(o.price)})` : '')).join(' · ')}</div>
@@ -159,6 +159,7 @@ function GroupForm({ initial, onClose }: { initial: ModifierGroup; onClose: () =
       const item: ModifierGroup = {
         ...g, id: g.id || uid('g'), name: g.name.trim(),
         max: g.kind === 'single' ? 1 : g.max, free: g.kind === 'qty' ? g.free : 0,
+        freeTiers: g.kind === 'qty' ? [...(g.freeTiers ?? [])].sort((a, b) => a.min - b.min) : [],
         options: g.options.filter((o) => o.name.trim()).map((o) => ({ ...o, name: o.name.trim() })),
       };
       const idx = d.groups.findIndex((x) => x.id === item.id);
@@ -183,7 +184,27 @@ function GroupForm({ initial, onClose }: { initial: ModifierGroup; onClose: () =
         <label className="field"><span>Máximo total (0 = sin límite)</span><input type="number" inputMode="numeric" value={g.max} onChange={(e) => setG({ ...g, max: Number(e.target.value) })} /></label>
       )}
       {g.kind === 'qty' && (
-        <label className="field"><span>Unidades gratis (las demás se cobran)</span><input type="number" inputMode="numeric" value={g.free} onChange={(e) => setG({ ...g, free: Number(e.target.value) })} /></label>
+        <fieldset className="mod-group">
+          <legend>Unidades gratis</legend>
+          <label className="check"><input type="radio" name="free-mode" checked={!g.freeTiers?.length} onChange={() => setG({ ...g, freeTiers: [] })} /> Cantidad fija</label>
+          <label className="check"><input type="radio" name="free-mode" checked={!!g.freeTiers?.length} onChange={() => setG({ ...g, freeTiers: [{ min: 0, free: 4 }, { min: 20, free: 6 }, { min: 30, free: 8 }, { min: 40, free: 10 }] })} /> Según el precio del plato</label>
+          {!g.freeTiers?.length ? (
+            <label className="field"><span>Gratis por plato (las demás se cobran)</span><input id="g-free" type="number" inputMode="numeric" value={g.free} onChange={(e) => setG({ ...g, free: Number(e.target.value) })} /></label>
+          ) : (
+            <>
+              <div className="tier-row muted small"><span>Plato desde (S/)</span><span>Gratis</span><span /></div>
+              {g.freeTiers.map((t, i) => (
+                <div key={i} className="tier-row">
+                  <input type="number" inputMode="decimal" aria-label="Precio desde" value={t.min} onChange={(e) => setG({ ...g, freeTiers: g.freeTiers.map((x, j) => (j === i ? { ...x, min: Number(e.target.value) } : x)) })} />
+                  <input type="number" inputMode="numeric" aria-label="Cantidad gratis" value={t.free} onChange={(e) => setG({ ...g, freeTiers: g.freeTiers.map((x, j) => (j === i ? { ...x, free: Number(e.target.value) } : x)) })} />
+                  <button className="icon-btn" aria-label="Quitar fila" onClick={() => setG({ ...g, freeTiers: g.freeTiers.filter((_, j) => j !== i) })}>✕</button>
+                </div>
+              ))}
+              <button className="btn ghost small" onClick={() => setG({ ...g, freeTiers: [...g.freeTiers, { min: 0, free: 0 }] })}>+ Agregar rango</button>
+              <p className="muted small">Ejemplo: un plato de S/ 25 usa la fila “desde 20”.</p>
+            </>
+          )}
+        </fieldset>
       )}
       <fieldset className="mod-group">
         <legend>Opciones</legend>

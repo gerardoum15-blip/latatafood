@@ -1,20 +1,12 @@
-import { useState } from 'react';
 import { assignDriver, orderTotal, setDeliveryStatus, useDb, useSession } from '../data/store';
-import { DELIVERY_LABEL, KITCHEN_LABEL, PAY_LABEL, type DeliveryStatus, type Order } from '../types';
+import { DELIVERY_LABEL, KITCHEN_LABEL, PAY_LABEL, type Order } from '../types';
 import { money, minutesAgo, time } from '../lib/format';
 import { fillTemplate, mapsLink, waLink } from '../lib/whatsapp';
-import { Empty, ItemLines, Tabs, useTick } from '../components/ui';
-
-const STEPS: { to: DeliveryStatus; label: string; msg: 'msgRecogido' | 'msgEnCamino' | 'msgEntregado' }[] = [
-  { to: 'recogido', label: 'Recogido', msg: 'msgRecogido' },
-  { to: 'en_camino', label: 'En camino', msg: 'msgEnCamino' },
-  { to: 'entregado', label: 'Entregado', msg: 'msgEntregado' },
-];
+import { Empty, ItemLines, useTick } from '../components/ui';
 
 export function DriverScreen() {
   const db = useDb();
   const user = useSession()!;
-  const [tab, setTab] = useState<'mios' | 'libres' | 'hoy'>('mios');
   useTick();
 
   const deliveries = db.orders.filter((o) => o.channel === 'delivery' && !o.cancelled);
@@ -23,43 +15,52 @@ export function DriverScreen() {
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const today = deliveries.filter((o) => o.closed && o.driverId === user.id && (o.closedAt ?? 0) >= start.getTime());
   const cashToday = today.reduce((s, o) => s + o.payments.filter((p) => p.method === 'efectivo').reduce((a, p) => a + p.amount, 0), 0);
-  const list = tab === 'mios' ? mine : tab === 'libres' ? free : today;
 
   return (
     <div className="page">
-      <div className="section-head"><h2>Mis entregas</h2></div>
-      <Tabs value={tab} onChange={setTab} options={[
-        { value: 'mios', label: `Míos (${mine.length})` },
-        { value: 'libres', label: `Sin driver (${free.length})` },
-        { value: 'hoy', label: `Hoy (${today.length})` },
-      ]} />
-      {tab === 'hoy' && today.length > 0 && (
-        <div className="card row between"><span>Efectivo cobrado hoy</span><b>{money(cashToday)}</b></div>
-      )}
-      {list.length === 0 && <Empty>{tab === 'mios' ? 'No tienes pedidos asignados.' : 'No hay pedidos.'}</Empty>}
-      <div className="cards">
-        {list.map((o) => <DriverCard key={o.id} order={o} free={tab === 'libres'} />)}
-      </div>
+      <section className="driver-section">
+        <h2>Mis pedidos <span className="count">{mine.length}</span></h2>
+        {mine.length === 0 ? <Empty>No tienes pedidos. Toma uno de la lista de abajo.</Empty> : (
+          <div className="cards">{mine.map((o) => <DriverCard key={o.id} order={o} />)}</div>
+        )}
+      </section>
+
+      <section className="driver-section">
+        <h2>Pedidos disponibles <span className="count">{free.length}</span></h2>
+        {free.length === 0 ? <Empty>No hay pedidos esperando driver.</Empty> : (
+          <div className="cards">{free.map((o) => <DriverCard key={o.id} order={o} available />)}</div>
+        )}
+      </section>
+
+      <details className="card">
+        <summary>Entregados hoy: {today.length} · efectivo cobrado {money(cashToday)}</summary>
+        <ul className="list">
+          {today.map((o) => (
+            <li key={o.id}><span className="grow">#{o.number} · {o.customer?.name}</span><span className="muted small">{o.closedAt ? time(o.closedAt) : ''}</span><b>{money(orderTotal(o))}</b></li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }
 
-function DriverCard({ order, free }: { order: Order; free: boolean }) {
+function DriverCard({ order, available }: { order: Order; available?: boolean }) {
   const db = useDb();
   const user = useSession()!;
   const c = order.customer!;
   const total = orderTotal(order);
   const local = db.locales.find((l) => l.id === order.localId);
-  const doneIdx = STEPS.findIndex((s) => s.to === order.deliveryStatus);
 
   const payText = order.plannedPay === 'efectivo'
     ? `efectivo${order.cashWith ? `, paga con ${money(order.cashWith)}` : ''}`
-    : order.plannedPay ? PAY_LABEL[order.plannedPay].toLowerCase() : '';
+    : order.plannedPay === 'pagado' ? 'ya pagado' : order.plannedPay ? PAY_LABEL[order.plannedPay] : '';
 
-  const stepLink = (step: typeof STEPS[number]) => waLink(c.phone, fillTemplate(db.settings[step.msg], {
+  const msg = (tpl: string) => waLink(c.phone, fillTemplate(tpl, {
     cliente: c.name.split(' ')[0], numero: String(order.number), negocio: db.settings.businessName,
-    driver: user.name, total: money(total), pago: payText, local: local?.name ?? '',
+    driver: user.name.split(' ')[0], total: money(total), pago: payText, local: local?.name ?? '',
   }));
+
+  const st = order.deliveryStatus;
 
   return (
     <article className="card order-card">
@@ -69,35 +70,41 @@ function DriverCard({ order, free }: { order: Order; free: boolean }) {
       </div>
       <div className="row gap wrap">
         <span className={`status s-${order.kitchenStatus}`}>Cocina: {KITCHEN_LABEL[order.kitchenStatus]}</span>
-        {order.deliveryStatus && <span className={`status d-${order.deliveryStatus}`}>{DELIVERY_LABEL[order.deliveryStatus]}</span>}
+        {st && st !== 'pendiente' && <span className={`status d-${st}`}>{DELIVERY_LABEL[st]}</span>}
         <span className="muted small">{time(order.createdAt)} · hace {minutesAgo(order.createdAt)} min</span>
       </div>
 
       <div className="driver-info">
-        <div><span className="muted">Dirección</span><b>{c.address || '—'}</b>{c.reference && <span className="muted"> Ref: {c.reference}</span>}</div>
-        <div><span className="muted">Cobrar</span><b>{order.plannedPay === 'pagado' ? 'Ya pagado' : money(total)}</b>
-          <span className="muted"> {order.plannedPay ? PAY_LABEL[order.plannedPay] : ''}{order.cashWith ? ` · paga con ${money(order.cashWith)} → vuelto ${money(order.cashWith - total)}` : ''}</span>
+        <div><span className="muted">Dirección</span><b>{c.address || '—'}</b></div>
+        <div><span className="muted">Cobrar</span>
+          <b>{order.plannedPay === 'pagado' ? 'Ya pagado' : `${money(total)} · ${order.plannedPay ? PAY_LABEL[order.plannedPay] : ''}`}</b>
+          {order.cashWith ? <span className="muted">Paga con {money(order.cashWith)} → llevar vuelto {money(order.cashWith - total)}</span> : null}
         </div>
       </div>
 
       <div className="row gap wrap">
-        <a className="btn wa grow" href={waLink(c.phone)} target="_blank" rel="noreferrer">💬 WhatsApp</a>
-        <a className="btn grow" href={`tel:${c.phone.replace(/\s/g, '')}`}>📞 Llamar</a>
-        <a className="btn maps grow" href={mapsLink(c.mapsUrl, c.address)} target="_blank" rel="noreferrer">📍 Google Maps</a>
+        <a className="btn maps grow" href={mapsLink(c.mapsUrl, c.address)} target="_blank" rel="noreferrer">📍 Ver ubicación</a>
+        <a className="btn grow" href={waLink(c.phone)} target="_blank" rel="noreferrer">💬 Chat</a>
       </div>
 
       <details><summary>Ver pedido ({order.items.reduce((s, i) => s + i.qty, 0)} ítems)</summary><ItemLines items={order.items} /></details>
 
-      {free ? (
+      {available ? (
         <button className="btn primary block" onClick={() => assignDriver(order.id, user.id, user)}>Tomar este pedido</button>
-      ) : !order.closed && (
-        <div className="steps">
-          {STEPS.map((s, i) => (i === doneIdx + 1 ? (
-            <a key={s.to} className="btn step primary" href={stepLink(s)} target="_blank" rel="noreferrer" onClick={() => setDeliveryStatus(order.id, s.to, user)}>{s.label}</a>
-          ) : (
-            <button key={s.to} className={i <= doneIdx ? 'btn step done' : 'btn step'} disabled>{i <= doneIdx ? '✓ ' : ''}{s.label}</button>
-          )))}
-          <p className="muted small full">Al marcar cada estado se abre WhatsApp con el mensaje listo para el cliente.</p>
+      ) : (
+        <div className="driver-actions">
+          <a className={st === 'pendiente' ? 'btn wa big' : 'btn wa big done'} href={msg(db.settings.msgEnCamino)} target="_blank" rel="noreferrer"
+            onClick={() => { if (st === 'pendiente') setDeliveryStatus(order.id, 'en_camino', user); }}>
+            🛵 Ya tengo tu pedido, estoy en camino{st !== 'pendiente' ? ' ✓' : ''}
+          </a>
+          <a className={st === 'llego' ? 'btn wa big done' : 'btn wa big'} href={msg(db.settings.msgLlegue)} target="_blank" rel="noreferrer"
+            onClick={() => { if (st !== 'llego') setDeliveryStatus(order.id, 'llego', user); }}>
+            📍 Ya llegué a tu ubicación{st === 'llego' ? ' ✓' : ''}
+          </a>
+          {st === 'llego' && (
+            <button className="btn ok block" onClick={() => setDeliveryStatus(order.id, 'entregado', user)}>Confirmar entrega y cobro</button>
+          )}
+          <p className="muted small">Cada botón abre WhatsApp con el mensaje listo para el cliente.</p>
         </div>
       )}
     </article>

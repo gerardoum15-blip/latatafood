@@ -160,7 +160,7 @@ details summary { cursor: pointer; color: var(--muted); font-weight: 600; paddin
 .s-listo, .s-servido { background: var(--ok-soft); color: var(--ok); }
 .s-anulado { background: var(--surface-2); color: var(--muted); }
 .d-pendiente { background: var(--surface-2); color: var(--muted); }
-.d-recogido { background: var(--warn-soft); color: var(--warn); }
+
 .d-en_camino { background: var(--info-soft); color: var(--info); }
 .d-entregado { background: var(--ok-soft); color: var(--ok); }
 
@@ -325,3 +325,15 @@ table.data tr.selected td { background: var(--brand-soft); }
 .notice { background: var(--ok-soft); color: var(--ok); border-radius: 10px; padding: 10px 12px; font-weight: 600; }
 
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--surface); }
+.menu-section { display: flex; flex-direction: column; gap: 8px; }
+.menu-section-title { margin: 6px 0 0; font-size: 0.82rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--brand); }
+.note-input { min-height: 36px; padding: 6px 10px; font-size: 0.9rem; margin: 4px 0 8px; }
+.d-llego { background: var(--warn-soft); color: var(--warn); }
+.success-box { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; padding: 24px 16px; }
+.success-box b { font-size: 1.2rem; }
+.driver-section { display: flex; flex-direction: column; gap: 10px; }
+.driver-section h2 { display: flex; align-items: center; gap: 8px; }
+.driver-actions { display: flex; flex-direction: column; gap: 8px; }
+.btn.big { min-height: 56px; font-size: 1rem; text-align: left; justify-content: flex-start; padding: 12px 16px; }
+.btn.wa.done { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.tier-row { display: grid; grid-template-columns: 1fr 1fr 36px; gap: 8px; align-items: center; }

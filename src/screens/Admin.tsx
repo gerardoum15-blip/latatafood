@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { generateDemoSales, mutate, orderTotal, resetAll, uid, useDb, useSession } from '../data/store';
+import { assignDriver, cancelOrder, generateDemoSales, mutate, orderTotal, resetAll, uid, useDb, useSession } from '../data/store';
 import { DELIVERY_LABEL, KITCHEN_LABEL, PAY_LABEL, ROLE_LABEL, type Role, type User } from '../types';
 import { dateTime, money, minutesAgo } from '../lib/format';
 import { periodRange, PERIOD_LABEL, type Period } from '../lib/reports';
@@ -54,6 +54,8 @@ export function AdminScreen() {
 
 function Monitor() {
   const db = useDb();
+  const me = useSession()!;
+  const drivers = db.users.filter((u) => u.role === 'driver' && u.active);
   const [localId, setLocalId] = useState('all');
   const open = db.orders.filter((o) => !o.closed && (localId === 'all' || o.localId === localId)).sort((a, b) => a.createdAt - b.createdAt);
   return (
@@ -63,16 +65,25 @@ function Monitor() {
       <div className="table-wrap">
         {open.length > 0 && (
           <table className="data">
-            <thead><tr><th>Pedido</th><th>Local</th><th>Cocina</th><th>Servicio</th><th className="num">Min</th><th className="num">Total</th></tr></thead>
+            <thead><tr><th>Pedido</th><th className="hide-sm">Local</th><th>Cocina</th><th>Servicio</th><th className="num">Min</th><th className="num">Total</th><th /></tr></thead>
             <tbody>
               {open.map((o) => (
                 <tr key={o.id}>
                   <td><b>#{o.number}</b> {o.channel === 'salon' ? `Mesa ${o.table}` : `🛵 ${o.customer?.name}`}<div className="muted small">{o.createdByName}</div></td>
-                  <td className="small">{db.locales.find((l) => l.id === o.localId)?.name}</td>
+                  <td className="small hide-sm">{db.locales.find((l) => l.id === o.localId)?.name}</td>
                   <td><span className={`status s-${o.kitchenStatus}`}>{KITCHEN_LABEL[o.kitchenStatus]}</span></td>
-                  <td className="small">{o.channel === 'delivery' ? `${o.deliveryStatus ? DELIVERY_LABEL[o.deliveryStatus] : ''} · ${db.users.find((u) => u.id === o.driverId)?.name ?? 'sin driver'}` : o.served ? 'Servido' : 'En mesa'}</td>
+                  <td className="small">{o.channel === 'delivery' ? (
+                    <>
+                      {o.deliveryStatus ? DELIVERY_LABEL[o.deliveryStatus] : ''}
+                      <select aria-label="Driver" value={o.driverId ?? ''} onChange={(e) => assignDriver(o.id, e.target.value || null, me)}>
+                        <option value="">Sin driver</option>
+                        {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </>
+                  ) : o.served ? 'Servido' : 'En mesa'}</td>
                   <td className="num">{minutesAgo(o.createdAt)}</td>
                   <td className="num">{money(orderTotal(o))}</td>
+                  <td><ConfirmButton className="btn small ghost danger" label="Anular" title={`Anular pedido #${o.number}`} message="El pedido no contará en las ventas." reason confirmLabel="Anular pedido" onConfirm={(r) => cancelOrder(o.id, r, me)} /></td>
                 </tr>
               ))}
             </tbody>
@@ -221,7 +232,8 @@ function SettingsScreen() {
     <div className="page">
       <div className="section-head"><h2>Ajustes</h2></div>
       <div className="card">
-        <label className="field"><span>Nombre del restaurante</span><input value={s.businessName} onChange={(e) => setS({ businessName: e.target.value })} /></label>
+        <label className="field"><span>Nombre del restaurante</span><input id="set-name" value={s.businessName} onChange={(e) => setS({ businessName: e.target.value })} /></label>
+        <label className="field"><span>WhatsApp de pedidos</span><input id="set-wa" type="tel" value={s.whatsapp} onChange={(e) => setS({ whatsapp: e.target.value })} /></label>
       </div>
       <div className="card">
         <h3>Locales</h3>
@@ -235,9 +247,8 @@ function SettingsScreen() {
       <div className="card">
         <h3>Mensajes de WhatsApp al cliente</h3>
         <p className="muted small">Variables: {'{cliente} {numero} {negocio} {driver} {total} {pago} {local}'}</p>
-        <label className="field"><span>Al marcar “Recogido”</span><textarea rows={3} value={s.msgRecogido} onChange={(e) => setS({ msgRecogido: e.target.value })} /></label>
-        <label className="field"><span>Al marcar “En camino”</span><textarea rows={3} value={s.msgEnCamino} onChange={(e) => setS({ msgEnCamino: e.target.value })} /></label>
-        <label className="field"><span>Al marcar “Entregado”</span><textarea rows={3} value={s.msgEntregado} onChange={(e) => setS({ msgEntregado: e.target.value })} /></label>
+        <label className="field"><span>Botón “Estoy en camino”</span><textarea id="msg-camino" rows={3} value={s.msgEnCamino} onChange={(e) => setS({ msgEnCamino: e.target.value })} /></label>
+        <label className="field"><span>Botón “Ya llegué”</span><textarea id="msg-llegue" rows={3} value={s.msgLlegue} onChange={(e) => setS({ msgLlegue: e.target.value })} /></label>
       </div>
       <div className="card">
         <h3>Datos de prueba</h3>

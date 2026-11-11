@@ -74,7 +74,7 @@ export function WaiterScreen() {
 }
 
 export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true }: {
-  title: string; localId: string; onCancel: () => void; onSend: (items: OrderItem[], note: string) => void;
+  title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string) => void;
   extra?: React.ReactNode; sendLabel?: string; canSend?: boolean;
 }) {
   const [cart, setCart] = useState<OrderItem[]>([]);
@@ -83,7 +83,7 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
   return (
     <div className="page">
       <div className="section-head">
-        <button className="btn ghost small" onClick={onCancel}>← Volver</button>
+        {onCancel && <button className="btn ghost small" onClick={onCancel}>← Volver</button>}
         <h2>{title}</h2>
       </div>
       {extra}
@@ -93,7 +93,7 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opcional" />
       </label>
       <div className="sticky-bar">
-        <span className="grow"><b>{money(total)}</b> · {cart.reduce((s, i) => s + i.qty, 0)} ítems</span>
+        <span className="grow">Cuenta: <b>{money(total)}</b> · {cart.reduce((s, i) => s + i.qty, 0)} ítems</span>
         <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(cart, note.trim())}>{sendLabel}</button>
       </div>
     </div>

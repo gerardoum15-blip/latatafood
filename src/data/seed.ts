@@ -2,68 +2,113 @@ import type { DB, ModifierGroup, Product } from '../types';
 
 const opt = (id: string, name: string, price = 0) => ({ id, name, price });
 
-const groups: ModifierGroup[] = [
-  {
-    id: 'g-cremas', name: 'Cremas', kind: 'qty', required: false, max: 6, free: 3,
-    options: [opt('cr-mayo', 'Mayonesa', 0.5), opt('cr-ketchup', 'Ketchup', 0.5), opt('cr-mostaza', 'Mostaza', 0.5), opt('cr-aji', 'Ají', 0.5), opt('cr-golf', 'Golf', 0.5), opt('cr-tartara', 'Tártara', 0.5)],
-  },
-  {
-    id: 'g-arroz', name: 'Arroz', kind: 'single', required: true, max: 1, free: 0,
-    options: [opt('ar-dentro', 'Dentro del plato'), opt('ar-aparte', 'Aparte'), opt('ar-sin', 'Sin arroz')],
-  },
-  {
-    id: 'g-ensalada', name: 'Ensalada', kind: 'single', required: true, max: 1, free: 0,
-    options: [opt('en-con', 'Con ensalada'), opt('en-sin', 'Sin ensalada'), opt('en-aparte', 'Ensalada aparte')],
-  },
-  {
-    id: 'g-alitas-pres', name: 'Presentación de alitas', kind: 'single', required: true, max: 1, free: 0,
-    options: [opt('al-banadas', 'Bañadas'), opt('al-aparte', 'Salsa aparte')],
-  },
-  {
-    id: 'g-alitas-salsa', name: 'Salsa de alitas', kind: 'single', required: true, max: 1, free: 0,
-    options: [opt('sa-bbq', 'BBQ'), opt('sa-acevichada', 'Acevichada'), opt('sa-buffalo', 'Buffalo picante'), opt('sa-maracuya', 'Maracuyá'), opt('sa-honey', 'Honey mustard'), opt('sa-teriyaki', 'Teriyaki')],
-  },
-  {
-    id: 'g-papas', name: 'Acompañamiento', kind: 'single', required: true, max: 1, free: 0,
-    options: [opt('pa-fritas', 'Papas fritas'), opt('pa-camote', 'Camote frito', 1), opt('pa-sin', 'Sin acompañamiento')],
-  },
-  {
-    id: 'g-extras', name: 'Extras', kind: 'multi', required: false, max: 0, free: 0,
-    options: [opt('ex-huevo', 'Huevo frito', 2), opt('ex-platano', 'Plátano frito', 2.5), opt('ex-queso', 'Queso', 2)],
-  },
-  {
-    id: 'g-bebida-temp', name: 'Temperatura', kind: 'single', required: true, max: 1, free: 0,
-    options: [opt('te-helada', 'Helada'), opt('te-natural', 'Al tiempo')],
-  },
+/** Cremas gratis según el precio del plato. */
+export const DEFAULT_CREAM_TIERS = [
+  { min: 0, free: 4 },
+  { min: 20, free: 6 },
+  { min: 30, free: 8 },
+  { min: 40, free: 10 },
 ];
 
-const p = (id: string, name: string, categoryId: string, price: number, groupIds: string[] = []): Product => ({
-  id, name, categoryId, price, groupIds, localPrices: {}, active: true,
+const group = (g: Omit<ModifierGroup, 'freeTiers' | 'free' | 'max'> & Partial<Pick<ModifierGroup, 'freeTiers' | 'free' | 'max'>>): ModifierGroup => ({
+  free: 0, max: 0, freeTiers: [], ...g,
+});
+
+const groups: ModifierGroup[] = [
+  group({
+    id: 'g-cremas', name: 'Cremas clásicas', kind: 'qty', required: false,
+    freeTiers: DEFAULT_CREAM_TIERS,
+    options: [opt('cr-mayo', 'Mayonesa', 0.5), opt('cr-ketchup', 'Ketchup', 0.5), opt('cr-mostaza', 'Mostaza', 0.5), opt('cr-rocoto', 'Rocoto', 0.5)],
+  }),
+  group({
+    id: 'g-salsas-extra', name: 'Salsas especiales', kind: 'qty', required: false,
+    options: [opt('se-acev-c', 'Acevichada clásica', 2), opt('se-acev-p', 'Acevichada picante', 2), opt('se-bbq-c', 'BBQ clásica', 2), opt('se-bbq-p', 'BBQ picante', 2)],
+  }),
+  group({
+    id: 'g-salsa-alitas', name: 'Salsa (incluida)', kind: 'single', required: true, max: 1,
+    options: [opt('sa-acev-c', 'Acevichada clásica'), opt('sa-acev-p', 'Acevichada picante'), opt('sa-bbq-c', 'BBQ clásica'), opt('sa-bbq-p', 'BBQ picante')],
+  }),
+  group({
+    id: 'g-alitas-pres', name: 'Presentación', kind: 'single', required: true, max: 1,
+    options: [opt('al-banadas', 'Bañadas'), opt('al-aparte', 'Salsa aparte')],
+  }),
+  group({
+    id: 'g-arroz', name: 'Arroz blanco', kind: 'single', required: true, max: 1,
+    options: [opt('ar-sin', 'Sin arroz'), opt('ar-dentro', 'Dentro del plato'), opt('ar-aparte', 'Aparte')],
+  }),
+  group({
+    id: 'g-ensalada', name: 'Ensalada (en frasco)', kind: 'single', required: true, max: 1,
+    options: [opt('en-con', 'Con ensalada'), opt('en-sin', 'Sin ensalada')],
+  }),
+];
+
+const CREMAS = ['g-cremas', 'g-salsas-extra'];
+const ALITAS = ['g-salsa-alitas', 'g-alitas-pres', 'g-cremas', 'g-salsas-extra'];
+
+let order = 0;
+const p = (categoryId: string, name: string, price: number, groupIds: string[] = []): Product => ({
+  id: `p-${++order}`, name, categoryId, price, groupIds, localPrices: {}, active: true,
 });
 
 const products: Product[] = [
-  p('p-alitas6', 'Alitas x6', 'c-alitas', 18, ['g-alitas-pres', 'g-alitas-salsa', 'g-papas', 'g-cremas']),
-  p('p-alitas12', 'Alitas x12', 'c-alitas', 32, ['g-alitas-pres', 'g-alitas-salsa', 'g-papas', 'g-cremas']),
-  p('p-broaster', 'Pollo broaster (pecho)', 'c-pollo', 16, ['g-papas', 'g-arroz', 'g-ensalada', 'g-cremas']),
-  p('p-broaster-pierna', 'Pollo broaster (pierna)', 'c-pollo', 15, ['g-papas', 'g-arroz', 'g-ensalada', 'g-cremas']),
-  p('p-salchi', 'Salchipapa clásica', 'c-pollo', 12, ['g-cremas', 'g-extras']),
-  p('p-lomo', 'Lomo saltado', 'c-fondos', 25, ['g-arroz', 'g-extras']),
-  p('p-chaufa', 'Arroz chaufa de pollo', 'c-fondos', 18, ['g-extras', 'g-cremas']),
-  p('p-milanesa', 'Milanesa de pollo', 'c-fondos', 20, ['g-papas', 'g-arroz', 'g-ensalada', 'g-cremas']),
-  p('p-inca', 'Inca Kola 500 ml', 'c-bebidas', 4, ['g-bebida-temp']),
-  p('p-coca', 'Coca Cola 500 ml', 'c-bebidas', 4, ['g-bebida-temp']),
-  p('p-chicha', 'Chicha morada (jarra)', 'c-bebidas', 12),
-  p('p-limonada', 'Limonada frozen', 'c-bebidas', 8),
+  // Hamburguesas (todas incluyen papas fritas)
+  p('c-hamb', 'La Pudiente', 16, CREMAS),
+  p('c-hamb', 'Royal Especial', 14, CREMAS),
+  p('c-hamb', 'Chesseburguer', 12, CREMAS),
+  p('c-hamb', 'La Carnosa', 10, CREMAS),
+  p('c-hamb', 'La Fitnes', 10, CREMAS),
+  p('c-hamb', 'Choripan Kids', 8, CREMAS),
+  // Brosther
+  p('c-brosther', 'Brosther a lo pobre · Pecho', 15, ['g-arroz', 'g-ensalada', ...CREMAS]),
+  p('c-brosther', 'Brosther a lo pobre · Doble ala', 18, ['g-arroz', 'g-ensalada', ...CREMAS]),
+  p('c-brosther', 'Salchibrosther · Pecho', 15, ['g-arroz', 'g-ensalada', ...CREMAS]),
+  p('c-brosther', 'Salchibrosther · Doble ala', 18, ['g-arroz', 'g-ensalada', ...CREMAS]),
+  p('c-brosther', 'Brosther especial · Pecho sabroso', 12, ['g-arroz', 'g-ensalada', ...CREMAS]),
+  p('c-brosther', 'Brosther especial · Pierna jugosa', 11, ['g-arroz', 'g-ensalada', ...CREMAS]),
+  p('c-brosther', 'Brosther especial · Muslo atrevido', 11, ['g-arroz', 'g-ensalada', ...CREMAS]),
+  p('c-brosther', 'Brosther especial · Alita crocante', 10, ['g-arroz', 'g-ensalada', ...CREMAS]),
+  // Alitas y piezas de pollo (incluye papas fritas + salsa de su preferencia)
+  p('c-alitas', 'Alitas Extra (14 uds)', 35, ALITAS),
+  p('c-alitas', 'Alitas Grande (10 uds)', 25, ALITAS),
+  p('c-alitas', 'Alitas Personal (5 uds)', 15, ALITAS),
+  p('c-alitas', 'Strips Grande (10 uds)', 25, ['g-salsa-alitas', 'g-cremas', 'g-salsas-extra']),
+  // Salchipapas (no incluye ensalada)
+  p('c-salchi', 'El Papirriqui', 18, ['g-arroz', ...CREMAS]),
+  p('c-salchi', 'Salchicarnosa', 16, ['g-arroz', ...CREMAS]),
+  p('c-salchi', 'Salchipizza', 16, ['g-arroz', ...CREMAS]),
+  p('c-salchi', 'Salchipollo', 16, ['g-arroz', ...CREMAS]),
+  p('c-salchi', 'Salchiclásica', 13, ['g-arroz', ...CREMAS]),
+  p('c-salchi', 'Salchikids', 10, ['g-arroz', ...CREMAS]),
+  // Platos especiales
+  p('c-especiales', 'Churrasco a lo pobre', 16, CREMAS),
+  p('c-especiales', 'Arroz a la cubana + ensalada', 10, CREMAS),
+  // Ensaladas
+  p('c-ensaladas', 'Ensalada + 1 filete de pollo', 12, CREMAS),
+  p('c-ensaladas', 'Ensalada + 2 filetes de pollo', 16, CREMAS),
+  // Gaseosas y bebidas
+  p('c-gaseosas', 'Coca Cola 600 ml', 4),
+  p('c-gaseosas', 'Inca Kola 600 ml', 4),
+  p('c-gaseosas', 'Pepsi 1.5 L', 6.5),
+  p('c-gaseosas', 'Chicha Morada 1 L', 8),
+  p('c-gaseosas', 'Maracuyá 1 L', 8),
+  // Combos y promociones
+  p('c-combos', 'Mixta Familiar (3 personas)', 35, ALITAS),
+  p('c-combos', 'Mega Familiar (6 personas)', 60, ALITAS),
+  // Adicionales
+  p('c-adicionales', 'Papas fritas grande', 10, CREMAS),
+  p('c-adicionales', 'Papas fritas XL', 12, CREMAS),
+  p('c-adicionales', 'Arroz blanco', 4),
+  p('c-adicionales', 'Hotdog ahumado', 4),
 ];
 
 export function createSeed(): DB {
   return {
-    version: 1,
+    version: 2,
     settings: {
-      businessName: 'Mi Restaurante',
-      msgRecogido: 'Hola {cliente} 👋, tu pedido #{numero} de {negocio} ya está listo y lo recogió nuestro motorizado {driver}. ¡En breve sale hacia tu dirección!',
-      msgEnCamino: 'Hola {cliente}, tu pedido #{numero} de {negocio} está en camino 🛵. Total a pagar: {total} ({pago}).',
-      msgEntregado: '¡Gracias por tu compra, {cliente}! 🙌 Tu pedido #{numero} de {negocio} fue entregado. ¡Buen provecho!',
+      businessName: 'La Tata Food',
+      whatsapp: '955093657',
+      msgEnCamino: 'Hola {cliente}, soy {driver} de {negocio} 🛵. Ya tengo tu pedido, estoy en camino a tu dirección.',
+      msgLlegue: 'Hola {cliente}, ya llegué a tu ubicación 📍. No demores en recoger tu pedido, por favor. Total: {total} ({pago}).',
     },
     locales: [
       { id: 'l-andahuaylas', name: 'Local Andahuaylas', tables: 12 },
@@ -73,16 +118,22 @@ export function createSeed(): DB {
       { id: 'u-admin', name: 'Administrador', role: 'admin', pin: '1234', localId: null, active: true },
       { id: 'u-coc-and', name: 'Cocina Andahuaylas', role: 'cocina', pin: '1111', localId: 'l-andahuaylas', active: true },
       { id: 'u-coc-pra', name: 'Cocina Las Praderas', role: 'cocina', pin: '2222', localId: 'l-praderas', active: true },
-      { id: 'u-mozo1', name: 'Mozo Carlos', role: 'mozo', pin: '3333', localId: null, active: true },
-      { id: 'u-deliv1', name: 'Delivery Ana', role: 'delivery', pin: '4444', localId: null, active: true },
-      { id: 'u-driver1', name: 'Driver Luis', role: 'driver', pin: '5555', localId: null, active: true },
-      { id: 'u-driver2', name: 'Driver Jorge', role: 'driver', pin: '6666', localId: null, active: true },
+      { id: 'u-mozo1', name: 'Mozo de mesa', role: 'mozo', pin: '3333', localId: null, active: true },
+      { id: 'u-deliv1', name: 'Mozo delivery', role: 'delivery', pin: '4444', localId: null, active: true },
+      { id: 'u-driver1', name: 'Carlos Chunga', role: 'driver', pin: '5551', localId: null, active: true },
+      { id: 'u-driver2', name: 'Dario Tesen', role: 'driver', pin: '5552', localId: null, active: true },
+      { id: 'u-driver3', name: 'Arturo Urbina', role: 'driver', pin: '5553', localId: null, active: true },
     ],
     categories: [
-      { id: 'c-alitas', name: 'Alitas', order: 1 },
-      { id: 'c-pollo', name: 'Broaster y salchipapas', order: 2 },
-      { id: 'c-fondos', name: 'Platos de fondo', order: 3 },
-      { id: 'c-bebidas', name: 'Bebidas', order: 4 },
+      { id: 'c-hamb', name: 'Hamburguesas', order: 1 },
+      { id: 'c-brosther', name: 'Brosther', order: 2 },
+      { id: 'c-alitas', name: 'Piezas de alitas', order: 3 },
+      { id: 'c-salchi', name: 'Salchipapas', order: 4 },
+      { id: 'c-especiales', name: 'Platos especiales', order: 5 },
+      { id: 'c-ensaladas', name: 'Ensaladas', order: 6 },
+      { id: 'c-gaseosas', name: 'Gaseosas y bebidas', order: 7 },
+      { id: 'c-combos', name: 'Combos y promociones', order: 8 },
+      { id: 'c-adicionales', name: 'Adicionales', order: 9 },
     ],
     groups,
     products,

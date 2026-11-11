@@ -6,10 +6,20 @@ import { ItemLines, Modal } from './ui';
 
 export const productPrice = (p: Product, localId: string) => p.localPrices[localId] ?? p.price;
 
+/** Unidades gratis de un grupo para un plato de cierto precio. */
+export function freeFor(group: ModifierGroup, price: number): number {
+  if (group.kind !== 'qty') return 0;
+  if (group.freeTiers?.length) {
+    const tier = [...group.freeTiers].sort((a, b) => b.min - a.min).find((t) => price >= t.min);
+    return tier?.free ?? 0;
+  }
+  return group.free;
+}
+
 /** Calcula el precio de los modificadores elegidos, respetando las unidades gratis. */
-function priceMods(group: ModifierGroup, picks: Record<string, number>): SelectedModifier[] {
+function priceMods(group: ModifierGroup, picks: Record<string, number>, basePrice: number): SelectedModifier[] {
   const out: SelectedModifier[] = [];
-  let freeLeft = group.kind === 'qty' ? group.free : 0;
+  let freeLeft = freeFor(group, basePrice);
   for (const o of group.options) {
     const q = picks[o.id] ?? 0;
     if (q <= 0) continue;
@@ -47,8 +57,8 @@ export function ProductCustomizer({ product, localId, onClose, onAdd }: {
   };
 
   const missing = groups.filter((g) => g.required && groupCount(g) === 0);
-  const mods = groups.flatMap((g) => priceMods(g, picks[g.id] ?? {}));
   const base = productPrice(product, localId);
+  const mods = groups.flatMap((g) => priceMods(g, picks[g.id] ?? {}, base));
   const unit = base + mods.reduce((s, m) => s + m.price, 0);
 
   const add = () => {
@@ -82,14 +92,14 @@ export function ProductCustomizer({ product, localId, onClose, onAdd }: {
               {g.name}
               <span className="pill">{g.required ? 'Obligatorio' : 'Opcional'}</span>
               {g.kind !== 'single' && g.max > 0 && <span className="pill">máx. {g.max}</span>}
-              {g.kind === 'qty' && g.free > 0 && <span className="pill ok">{g.free} gratis</span>}
+              {g.kind === 'qty' && freeFor(g, base) > 0 && <span className="pill ok">{freeFor(g, base)} gratis · usadas {Math.min(count, freeFor(g, base))}</span>}
             </legend>
             {g.options.map((o) => {
               const val = picks[g.id]?.[o.id] ?? 0;
               if (g.kind === 'qty') {
                 return (
                   <div key={o.id} className="mod-opt">
-                    <span className="grow">{o.name}{o.price > 0 && <span className="muted"> +{money(o.price)} c/u extra</span>}</span>
+                    <span className="grow">{o.name}{o.price > 0 && <span className="muted"> +{money(o.price)}{freeFor(g, base) > 0 ? ' c/u extra' : ' c/u'}</span>}</span>
                     <div className="stepper small">
                       <button onClick={() => setPick(g, o.id, val - 1)} disabled={val === 0} aria-label={`Quitar ${o.name}`}>−</button>
                       <span>{val}</span>
@@ -123,13 +133,43 @@ export function ProductCustomizer({ product, localId, onClose, onAdd }: {
   );
 }
 
-/** Carta para elegir productos + carrito. */
+/** Plato momentáneo: algo que no está en la carta (nombre y precio libres). */
+function CustomItemModal({ onClose, onAdd }: { onClose: () => void; onAdd: (item: OrderItem) => void }) {
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [qty, setQty] = useState(1);
+  const [note, setNote] = useState('');
+  const valid = name.trim() && Number(price) >= 0 && price !== '';
+  return (
+    <Modal title="Plato momentáneo" onClose={onClose} footer={
+      <div className="row gap">
+        <div className="stepper">
+          <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="Menos">−</button>
+          <span>{qty}</span>
+          <button onClick={() => setQty((q) => q + 1)} aria-label="Más">+</button>
+        </div>
+        <button className="btn primary grow" disabled={!valid} onClick={() => {
+          const n = name.trim();
+          onAdd({ id: uid('i'), productId: `custom:${n.toLowerCase()}`, name: n, basePrice: Number(price), unitPrice: Number(price), qty, modifiers: [], note: note.trim(), round: 1 });
+        }}>Agregar · {money((Number(price) || 0) * qty)}</button>
+      </div>
+    }>
+      <p className="muted">Para un plato o pedido especial que no está en la carta.</p>
+      <label className="field"><span>Nombre del plato</span><input id="custom-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Media porción de papas" autoFocus /></label>
+      <label className="field"><span>Precio (S/)</span><input id="custom-price" type="number" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
+      <label className="field"><span>Observación para cocina</span><input id="custom-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opcional" /></label>
+    </Modal>
+  );
+}
+
+/** Carta ordenada por área + carrito. */
 export function OrderBuilder({ localId, cart, setCart }: { localId: string; cart: OrderItem[]; setCart: (c: OrderItem[]) => void }) {
   const db = useDb();
   const cats = [...db.categories].sort((a, b) => a.order - b.order);
   const [cat, setCat] = useState<string>('all');
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<Product | null>(null);
+  const [custom, setCustom] = useState(false);
 
   const list = useMemo(() => db.products.filter((p) => p.active
     && (cat === 'all' || p.categoryId === cat)
@@ -143,33 +183,47 @@ export function OrderBuilder({ localId, cart, setCart }: { localId: string; cart
     else setCart([...cart, { id: uid('i'), productId: p.id, name: p.name, basePrice: price, unitPrice: price, qty: 1, modifiers: [], note: '', round: 1 }]);
   };
 
+  const setNote = (it: OrderItem, note: string) => setCart(cart.map((x) => (x === it ? { ...x, note } : x)));
+
   return (
     <div className="builder">
       <div className="builder-menu">
-        <input className="search" placeholder="Buscar plato o bebida…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="search" id="menu-search" placeholder="Buscar plato o bebida…" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="chips">
-          <button className={cat === 'all' ? 'chip active' : 'chip'} onClick={() => setCat('all')}>Todo</button>
+          <button className={cat === 'all' ? 'chip active' : 'chip'} onClick={() => setCat('all')}>Toda la carta</button>
           {cats.map((c) => (
             <button key={c.id} className={cat === c.id ? 'chip active' : 'chip'} onClick={() => setCat(c.id)}>{c.name}</button>
           ))}
         </div>
-        <div className="product-grid">
-          {list.map((p) => (
-            <button key={p.id} className="product-card" onClick={() => addDirect(p)}>
-              <span className="pc-name">{p.name}</span>
-              <span className="pc-price">{money(productPrice(p, localId))}</span>
-              {p.groupIds.length > 0 && <span className="pc-tag">Personalizable</span>}
-            </button>
-          ))}
-        </div>
+        {cats.map((c) => {
+          const items = list.filter((p) => p.categoryId === c.id);
+          if (!items.length) return null;
+          return (
+            <section key={c.id} className="menu-section">
+              <h3 className="menu-section-title">{c.name}</h3>
+              <div className="product-grid">
+                {items.map((p) => (
+                  <button key={p.id} className="product-card" onClick={() => addDirect(p)}>
+                    <span className="pc-name">{p.name}</span>
+                    <span className="pc-price">{money(productPrice(p, localId))}</span>
+                    {p.groupIds.length > 0 && <span className="pc-tag">Personalizable</span>}
+                  </button>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+        {list.length === 0 && <p className="muted">No hay platos con ese nombre.</p>}
+        <button className="btn ghost" onClick={() => setCustom(true)}>+ Plato momentáneo (fuera de carta)</button>
       </div>
       <div className="builder-cart">
-        <h3>Pedido ({cart.reduce((s, i) => s + i.qty, 0)})</h3>
+        <h3>Cuenta ({cart.reduce((s, i) => s + i.qty, 0)})</h3>
         {cart.length === 0 ? <p className="muted">Toca un plato para agregarlo.</p> : (
           <ul className="cart-list">
             {cart.map((it) => (
               <li key={it.id}>
                 <ItemLines items={[it]} />
+                <input className="note-input" aria-label={`Observación para ${it.name}`} value={it.note} onChange={(e) => setNote(it, e.target.value)} placeholder="Observación (opcional)" />
                 <div className="row gap">
                   <div className="stepper small">
                     <button onClick={() => setCart(it.qty <= 1 ? cart.filter((x) => x !== it) : cart.map((x) => (x === it ? { ...x, qty: x.qty - 1 } : x)))} aria-label="Menos">−</button>
@@ -191,6 +245,7 @@ export function OrderBuilder({ localId, cart, setCart }: { localId: string; cart
           onAdd={(item) => { setCart([...cart, item]); setEditing(null); }}
         />
       )}
+      {custom && <CustomItemModal onClose={() => setCustom(false)} onAdd={(item) => { setCart([...cart, item]); setCustom(false); }} />}
     </div>
   );
 }

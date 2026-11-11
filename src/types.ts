@@ -52,6 +52,11 @@ export interface ModifierGroup {
   max: number;
   /** Cantidad incluida gratis (qty). Las adicionales se cobran al precio de cada opción. */
   free: number;
+  /**
+   * Gratis según el precio del plato (qty). Si tiene filas, reemplaza a `free`:
+   * se usa la fila con el mayor `min` que sea <= precio del plato.
+   */
+  freeTiers: { min: number; free: number }[];
   options: ModifierOption[];
 }
 
@@ -90,7 +95,7 @@ export interface OrderItem {
 export type Channel = 'salon' | 'delivery';
 
 export type KitchenStatus = 'enviado' | 'recibido' | 'preparando' | 'listo';
-export type DeliveryStatus = 'pendiente' | 'recogido' | 'en_camino' | 'entregado';
+export type DeliveryStatus = 'pendiente' | 'en_camino' | 'llego' | 'entregado';
 
 export const KITCHEN_LABEL: Record<KitchenStatus, string> = {
   enviado: 'Enviado a cocina',
@@ -100,9 +105,9 @@ export const KITCHEN_LABEL: Record<KitchenStatus, string> = {
 };
 
 export const DELIVERY_LABEL: Record<DeliveryStatus, string> = {
-  pendiente: 'Por recoger',
-  recogido: 'Recogido',
+  pendiente: 'Por salir',
   en_camino: 'En camino',
+  llego: 'Llegó al cliente',
   entregado: 'Entregado',
 };
 
@@ -171,9 +176,9 @@ export interface Order {
 
 export interface Settings {
   businessName: string;
-  msgRecogido: string;
+  whatsapp: string;
   msgEnCamino: string;
-  msgEntregado: string;
+  msgLlegue: string;
 }
 
 export interface DB {
