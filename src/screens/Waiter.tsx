@@ -111,7 +111,7 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
         <div className="card packaging">
           <div className="grow">
             <b>Costo de empaques</b>
-            <div className="muted small">{money(pkgPrice)} por plato · sugerido: {suggested} {suggested === 1 ? 'plato' : 'platos'} (sin bebidas)</div>
+            <div className="muted small">{money(pkgPrice)} por plato · sugerido: {suggested} {suggested === 1 ? 'plato' : 'platos'} (sin bebidas ni adicionales)</div>
           </div>
           <div className="stepper small">
             <button onClick={() => setPkgManual(Math.max(0, pkgQty - 1))} aria-label="Menos empaques">−</button>
