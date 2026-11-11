@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { uid, useDb } from '../data/store';
 import type { DB, ModifierGroup, OrderItem, Product, SelectedModifier } from '../types';
-import { money } from '../lib/format';
+import { availableToday, daysLabel, money } from '../lib/format';
 import { ItemLines, Modal } from './ui';
 
 export const productPrice = (p: Product, localId: string) => p.localPrices[localId] ?? p.price;
@@ -276,10 +276,10 @@ export function OrderBuilder({ localId, cart, setCart, picks, setPicks }: {
               <h3 className="menu-section-title">{c.name}</h3>
               <div className="product-grid">
                 {items.map((p) => (
-                  <button key={p.id} className="product-card" onClick={() => addDirect(p)}>
+                  <button key={p.id} className="product-card" disabled={!availableToday(p)} onClick={() => addDirect(p)}>
                     <span className="pc-name">{p.name}</span>
                     <span className="pc-price">{money(productPrice(p, localId))}</span>
-                    {hasItemGroups(db, p) && <span className="pc-tag">Personalizable</span>}
+                    {!availableToday(p) ? <span className="pc-tag">Solo {daysLabel(p.days).toLowerCase()}</span> : hasItemGroups(db, p) && <span className="pc-tag">Personalizable</span>}
                   </button>
                 ))}
               </div>

@@ -15,3 +15,17 @@ export const dayKey = (t: number) => {
 export const minutesAgo = (t: number) => Math.max(0, Math.floor((Date.now() - t) / 60000));
 
 export const fmtMinutes = (m: number) => (m < 60 ? `${Math.round(m)} min` : `${Math.floor(m / 60)} h ${Math.round(m % 60)} min`);
+
+const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+export const DAY_NAMES = DAY_SHORT;
+
+/** ¿Está disponible hoy? (sin días marcados = todos los días) */
+export const availableToday = (p: { days?: number[] }) => !p.days?.length || p.days.includes(new Date().getDay());
+
+export function daysLabel(days?: number[]): string {
+  if (!days?.length || days.length === 7) return 'Todos los días';
+  const s = [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+  if (s.join() === '1,2,3,4,5') return 'Lunes a viernes';
+  if (s.join() === '6,0') return 'Fines de semana';
+  return s.map((d) => DAY_SHORT[d]).join(', ');
+}

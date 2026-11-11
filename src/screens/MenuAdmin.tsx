@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { mutate, uid, useDb } from '../data/store';
 import type { Category, ModifierGroup, ModifierKind, Product } from '../types';
-import { money } from '../lib/format';
+import { DAY_NAMES, daysLabel, money } from '../lib/format';
 import { ConfirmButton, Modal, Tabs } from '../components/ui';
 
 const KIND_LABEL: Record<ModifierKind, string> = {
@@ -44,6 +44,7 @@ function Products() {
                   <b>{p.name}</b> · {money(p.price)}
                   {Object.keys(p.localPrices).length > 0 && <span className="pill">precio por local</span>}
                   {!p.active && <span className="pill">oculto</span>}
+                  {p.days?.length ? <span className="pill">{daysLabel(p.days)}</span> : null}
                   <div className="muted small">{p.groupIds.map((g) => db.groups.find((x) => x.id === g)?.name).filter(Boolean).join(' · ') || 'Sin personalización'}</div>
                 </div>
                 <button className="btn small" onClick={() => setEdit(p)}>Editar</button>
@@ -103,6 +104,20 @@ function ProductForm({ initial, onClose }: { initial: Product; onClose: () => vo
         </label>
       ))}
       <label className="check"><input type="checkbox" checked={p.active} onChange={(e) => setP({ ...p, active: e.target.checked })} /> Disponible (visible en la carta)</label>
+      <fieldset className="mod-group">
+        <legend>Días disponibles <span className="pill">{daysLabel(p.days)}</span></legend>
+        <div className="day-picks">
+          {[1, 2, 3, 4, 5, 6, 0].map((d) => {
+            const on = !!p.days?.includes(d);
+            return <button key={d} type="button" className={on ? 'seg active' : 'seg'} aria-pressed={on} onClick={() => setP({ ...p, days: on ? (p.days ?? []).filter((x) => x !== d) : [...(p.days ?? []), d] })}>{DAY_NAMES[d]}</button>;
+          })}
+        </div>
+        <div className="row gap wrap">
+          <button type="button" className="link small" onClick={() => setP({ ...p, days: [1, 2, 3, 4, 5] })}>Lunes a viernes</button>
+          <button type="button" className="link small" onClick={() => setP({ ...p, days: [] })}>Todos los días</button>
+        </div>
+      </fieldset>
+      <label className="check"><input type="checkbox" checked={(p.packaging ?? db.categories.find((c) => c.id === p.categoryId)?.packaging) !== false} onChange={(e) => setP({ ...p, packaging: e.target.checked })} /> Cuenta para el costo de empaque en delivery</label>
       <fieldset className="mod-group">
         <legend>Personalizaciones de este producto</legend>
         {db.groups.map((g) => (

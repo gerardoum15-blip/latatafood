@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { uid, useDb } from '../data/store';
 import { PAY_LABEL, type OrderItem, type PayMethod, type Product } from '../types';
-import { money } from '../lib/format';
+import { availableToday, daysLabel, money } from '../lib/format';
 import { waLink } from '../lib/whatsapp';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
@@ -136,14 +136,17 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
                 {list.map((p) => {
                   const inCart = cart.filter((i) => i.productId === p.id).reduce((s, i) => s + i.qty, 0);
                   return (
-                    <article key={p.id} className="c-item">
+                    <article key={p.id} className={availableToday(p) ? 'c-item' : 'c-item off'}>
                       <div className="c-item-text">
                         <h3>{p.name}{p.badge && <span className="c-badge">{p.badge}</span>}</h3>
                         {p.description && <p>{p.description}</p>}
+                        {p.days?.length ? <p className="c-days">Disponible: {daysLabel(p.days).toLowerCase()}</p> : null}
                       </div>
                       <div className="c-item-foot">
                         <b>{money(productPrice(p, localId))}</b>
-                        <button className="btn primary small" onClick={() => add(p)}>{inCart ? `Agregar otro (${inCart})` : 'Agregar'}</button>
+                        {availableToday(p)
+                          ? <button className="btn primary small" onClick={() => add(p)}>{inCart ? `Agregar otro (${inCart})` : 'Agregar'}</button>
+                          : <span className="muted small">No disponible hoy</span>}
                       </div>
                     </article>
                   );

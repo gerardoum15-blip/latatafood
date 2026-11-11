@@ -429,3 +429,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .c-bar .btn { min-height: 52px; font-size: 1.02rem; }
 .c-welcome { max-width: 420px; width: calc(100% - 32px); margin: 24px auto; display: flex; flex-direction: column; gap: 12px; }
 .customer-entry { background: var(--chalk); color: var(--tata-yellow); border-color: var(--chalk); }
+.product-card:disabled { opacity: 0.5; cursor: not-allowed; }
+.c-item.off { opacity: 0.6; }
+.c-days { color: var(--tata-red) !important; font-weight: 700; }
+.day-picks { display: flex; flex-wrap: wrap; gap: 4px; }

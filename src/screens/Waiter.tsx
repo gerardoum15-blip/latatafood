@@ -79,7 +79,8 @@ export function suggestPackaging(items: OrderItem[], db: ReturnType<typeof useDb
     if (i.productId.startsWith('extras:')) return s;
     const p = db.products.find((x) => x.id === i.productId);
     const c = db.categories.find((x) => x.id === p?.categoryId);
-    return s + (c?.packaging === false ? 0 : i.qty);
+    const pk = p?.packaging ?? c?.packaging;
+    return s + (pk === false ? 0 : i.qty);
   }, 0);
 }
 

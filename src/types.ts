@@ -79,6 +79,10 @@ export interface Product {
   description?: string;
   /** Etiqueta destacada, ej. "La más vendida". */
   badge?: string;
+  /** Si lleva empaque en delivery. Vacío = lo que diga su categoría. */
+  packaging?: boolean;
+  /** Días disponibles (0 = domingo … 6 = sábado). Vacío = todos los días. */
+  days?: number[];
 }
 
 export interface SelectedModifier {
