@@ -9,6 +9,7 @@ import { DeliveryScreen } from './screens/Delivery';
 import { KitchenScreen } from './screens/Kitchen';
 import { DriverScreen } from './screens/Driver';
 import { CustomerApp } from './screens/Customer';
+import logo from './assets/logo.webp';
 
 function useHash() {
   const [h, setH] = useState(() => (typeof location !== 'undefined' ? location.hash : ''));
@@ -66,7 +67,7 @@ function Login() {
   return (
     <div className="login">
       <div className="login-box">
-        <h1>{db.settings.businessName}</h1>
+        <h1 className="login-logo"><img src={logo} alt={db.settings.businessName} width={640} height={453} /></h1>
         <p className="muted">Ingresa tu PIN</p>
         <div className={err ? 'pin-dots error' : 'pin-dots'} aria-live="polite">
           {Array.from({ length: Math.max(4, pin.length) }, (_, i) => <span key={i} className={i < pin.length ? 'on' : ''} />)}

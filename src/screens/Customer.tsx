@@ -6,6 +6,7 @@ import { waLink } from '../lib/whatsapp';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
 import { suggestPackaging } from './Waiter';
+import logo from '../assets/logo.webp';
 
 const KEY = 'pos-restaurante-cliente';
 type Client = { name: string; phone: string };
@@ -26,12 +27,7 @@ export function CustomerApp() {
 
 function Brand() {
   const db = useDb();
-  const [first, ...rest] = db.settings.businessName.split(' ');
-  return (
-    <div className="c-brand">
-      <span className="c-brand-a">{first}</span> <span className="c-brand-b">{rest.join(' ')}</span>
-    </div>
-  );
+  return <h1 className="c-brand"><img src={logo} alt={db.settings.businessName} width={640} height={453} /></h1>;
 }
 
 function Welcome({ onDone }: { onDone: (c: Client) => void }) {

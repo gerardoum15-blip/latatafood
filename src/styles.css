@@ -390,4 +390,8 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 
 .topbar .btn.ghost { color: #ffffff; border-color: #4a4545; }
 .login h1 { color: var(--ink); text-transform: uppercase; letter-spacing: 0.02em; }
-.login h1::after { content: ""; display: block; width: 56px; height: 4px; background: var(--brand); margin: 10px auto 0; border-radius: 2px; }
+.login-logo { margin: 0; }
+.login-logo img { width: min(240px, 70vw); height: auto; display: block; margin: 0 auto; }
+.login-logo::after { content: ""; display: block; width: 56px; height: 4px; background: var(--brand); margin: 12px auto 0; border-radius: 2px; }
+.c-brand { margin: 0; }
+.c-brand img { width: min(300px, 78vw); height: auto; display: block; }
