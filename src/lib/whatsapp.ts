@@ -26,3 +26,6 @@ export function mapsLink(mapsUrl: string, address: string) {
   if (mapsUrl.trim()) return mapsUrl.trim();
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
+
+/** Enlace para que el cliente siga su pedido (código del pedido web o del pedido). */
+export const trackUrl = (ref: string) => `${location.origin}${location.pathname}#seguir-${ref}`;

@@ -1,5 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { fetchRequestStatus, type RequestStatus } from '../data/cloud';
+import { trackOrder, type RequestStatus } from '../data/cloud';
+import { LiveMap } from '../components/LiveMap';
+import logo from '../assets/logo.webp';
 import { useDb } from '../data/store';
 import { Modal } from '../components/ui';
 
@@ -41,21 +43,45 @@ function stepOf(s: RequestStatus, mode: Mode): number {
   return 0;
 }
 
+type Tracked2 = RequestStatus & { location: { lat: number; lng: number; updated_at: string } | null };
+
 export function OrderTracker({ id, onClose }: { id: string; onClose: () => void }) {
+  return (
+    <Modal title="Tu pedido" onClose={onClose} footer={<button className="btn primary block" onClick={onClose}>Volver a la carta</button>}>
+      <TrackerBody id={id} />
+    </Modal>
+  );
+}
+
+/** Página propia del enlace de seguimiento (…#seguir-CODIGO). */
+export function TrackingPage({ id }: { id: string }) {
+  return (
+    <div className="landing">
+      <main className="landing-main track-page">
+        <img className="landing-logo small" src={logo} alt="La Tata Food" width={640} height={453} />
+        <h1>Tu pedido</h1>
+        <TrackerBody id={id} />
+        <a className="btn landing-cta" href="#carta">🍗 Ver la carta</a>
+      </main>
+    </div>
+  );
+}
+
+function TrackerBody({ id }: { id: string }) {
   const db = useDb();
-  const [s, setS] = useState<RequestStatus | null>(null);
+  const [s, setS] = useState<Tracked2 | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
     const load = async () => {
-      const r = await fetchRequestStatus(id);
+      const r = await trackOrder(id);
       if (!alive) return;
       setS(r);
       setLoaded(true);
     };
     void load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 10000);
     return () => { alive = false; clearInterval(t); };
   }, [id]);
 
@@ -64,7 +90,8 @@ export function OrderTracker({ id, onClose }: { id: string; onClose: () => void 
   const step = s ? stepOf(s, mode) : -1;
 
   return (
-    <Modal title={s?.number ? `Tu pedido #${s.number}` : 'Tu pedido'} onClose={onClose} footer={<button className="btn primary block" onClick={onClose}>Volver a la carta</button>}>
+    <div className="tracker">
+      {s?.number ? <p className="track-number">Pedido <b>#{s.number}</b></p> : null}
       {!loaded && <p className="muted">Consultando…</p>}
       {loaded && !s && <p className="muted">No encontramos este pedido. Escríbenos al WhatsApp {db.settings.whatsapp}.</p>}
       {s?.status === 'rechazado' && (
@@ -92,9 +119,15 @@ export function OrderTracker({ id, onClose }: { id: string; onClose: () => void 
               </li>
             ))}
           </ol>
+          {s.location && mode === 'delivery' && step === 3 && (
+            <div className="track-map">
+              <p className="small"><b>{s.driver ?? 'Tu motorizado'}</b> está en camino · ubicación de hace {Math.max(0, Math.round((Date.now() - new Date(s.location.updated_at).getTime()) / 60000))} min</p>
+              <LiveMap points={[{ id: 'driver', lat: s.location.lat, lng: s.location.lng, label: (s.driver ?? 'Motorizado').split(' ')[0], kind: 'driver' }]} height={240} />
+            </div>
+          )}
           <p className="muted small">Se actualiza solo cada pocos segundos.</p>
         </>
       )}
-    </Modal>
+    </div>
   );
 }

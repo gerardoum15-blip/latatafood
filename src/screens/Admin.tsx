@@ -11,16 +11,18 @@ import { KitchenScreen } from './Kitchen';
 import { ReportsScreen } from './Reports';
 import { MenuAdmin } from './MenuAdmin';
 import { OrderLog } from './OrderLog';
+import { DriversPanel } from './DriversPanel';
 import { TicketButton } from '../components/TicketButton';
 import { TicketSettingsCard } from './TicketSettings';
 import { RulesSettings } from './RulesSettings';
 import { localAddress } from '../lib/rules';
 import { CLOUD, setStaffPin, signOutDevice, useCloud } from '../data/cloud';
 
-type Section = 'monitor' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
+type Section = 'monitor' | 'drivers' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
 
 const NAV: { key: Section; label: string; icon: string }[] = [
   { key: 'monitor', label: 'Pedidos', icon: '📋' },
+  { key: 'drivers', label: 'Drivers', icon: '📍' },
   { key: 'salon', label: 'Salón', icon: '🍽' },
   { key: 'delivery', label: 'Delivery', icon: '🛵' },
   { key: 'cocina', label: 'Cocina', icon: '👨‍🍳' },
@@ -45,6 +47,7 @@ export function AdminScreen() {
       </nav>
       <main>
         {sec === 'monitor' && <OrderLog admin />}
+        {sec === 'drivers' && <DriversPanel showMoney />}
         {sec === 'salon' && <WaiterScreen />}
         {sec === 'delivery' && <DeliveryScreen />}
         {sec === 'cocina' && <KitchenScreen />}

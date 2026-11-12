@@ -466,3 +466,22 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .landing-locals li { display: flex; flex-direction: column; padding: 10px 12px; border-left: 4px solid var(--brand); background: var(--surface-2); border-radius: 0 10px 10px 0; }
 .landing-locals span { color: var(--muted); font-size: 0.86rem; }
 .local-edit { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+
+/* Mapa en vivo de drivers */
+.live-map { width: 100%; border-radius: var(--radius); border: 1px solid var(--border); position: relative; z-index: 0; isolation: isolate; }
+.live-pin { background: none; border: 0; }
+.live-pin .dot { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--brand); border: 3px solid #ffffff; box-shadow: 0 2px 8px rgb(0 0 0 / 0.35); font-size: 20px; }
+.live-pin.driver-old .dot { background: #8a8585; }
+.live-pin.client .dot { background: var(--ink); }
+.live-pin .tag { position: absolute; left: 50%; top: 42px; transform: translateX(-50%); white-space: nowrap; background: var(--ink); color: #ffffff; font: 700 12px/1.2 -apple-system, sans-serif; padding: 3px 7px; border-radius: 6px; }
+.driver-card { display: flex; flex-direction: column; gap: 6px; }
+.driver-card h4 { margin: 6px 0 0; font-size: 0.9rem; }
+.share-banner { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 0.9rem; }
+.share-banner.on { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.share-banner.off { background: var(--danger-soft); color: var(--danger); }
+.tracker { display: flex; flex-direction: column; gap: 10px; width: 100%; text-align: left; }
+.track-number { margin: 0; }
+.track-map { display: flex; flex-direction: column; gap: 6px; }
+.track-map p { margin: 0; }
+.track-page h1::after { display: none; }
+.landing-logo.small { width: min(200px, 60vw); }

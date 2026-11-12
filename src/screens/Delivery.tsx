@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { addItems, createOrder, nextDriver, orderTotal, useDb, useSession } from '../data/store';
 import { PAY_LABEL, type Customer, type PayMethod } from '../types';
 import { money, orderNo } from '../lib/format';
-import { isUrl, waLink } from '../lib/whatsapp';
+import { isUrl, trackUrl, waLink } from '../lib/whatsapp';
 import { minutesAgo } from '../lib/format';
 import { CLOUD, resolveRequest, useRequests, type OrderRequest } from '../data/cloud';
 import { beep } from './Kitchen';
@@ -27,7 +27,7 @@ export function DeliveryScreen() {
   const [customer, setCustomer] = useState<Customer>(EMPTY);
   const [pay, setPay] = useState<PayMethod>('efectivo');
   const [cashWith, setCashWith] = useState('');
-  const [sent, setSent] = useState<{ id: string; name: string; phone: string; total: number; localName: string } | null>(null);
+  const [sent, setSent] = useState<{ id: string; ref: string; name: string; phone: string; total: number; localName: string } | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [initial, setInitial] = useState<InitialOrder | undefined>(undefined);
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -90,7 +90,7 @@ export function DeliveryScreen() {
           <b>Pedido {orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} enviado a cocina</b>
           <span className="muted">{sent.name} · {money(sent.total)} · {sent.localName}</span>
           {sent.phone && (
-            <a className="btn wa block" target="_blank" rel="noreferrer" href={waLink(sent.phone, `Hola ${sent.name.split(' ')[0]}, confirmamos tu pedido ${orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} de ${db.settings.businessName}. Total: ${money(sent.total)}${'\n'}Ya lo estamos preparando. Te avisaremos cuando salga el motorizado.`)}>Confirmar al cliente por WhatsApp</a>
+            <a className="btn wa block" target="_blank" rel="noreferrer" href={waLink(sent.phone, `Hola ${sent.name.split(' ')[0]}, confirmamos tu pedido ${orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} de ${db.settings.businessName}. Total: ${money(sent.total)}${'\n'}Ya lo estamos preparando. Te avisaremos cuando salga el motorizado.${'\n'}Sigue tu pedido aquí: ${trackUrl(sent.ref)}`)}>Confirmar al cliente por WhatsApp</a>
           )}
           {db.orders.find((o) => o.id === sent.id) && <TicketButton order={db.orders.find((o) => o.id === sent.id)!} className="btn block" label="🧾 Ver / enviar ticket" />}
           <button className="btn primary block" onClick={() => { setSent(null); setInitial(undefined); setImportInfo(null); setActiveReq(null); setFormKey((k) => k + 1); }}>+ Tomar otro pedido</button>
@@ -215,7 +215,7 @@ export function DeliveryScreen() {
           }, user);
         }
         if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
-        setSent({ id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: 0, packagingAmount: dineIn ? 0 : pkg.amount }) });
+        setSent({ id, ref: activeReq?.id ?? id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: 0, packagingAmount: dineIn ? 0 : pkg.amount }) });
         setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal);
       }}
     />

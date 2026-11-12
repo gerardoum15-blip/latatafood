@@ -12,7 +12,8 @@ import { CustomerApp } from './screens/Customer';
 import logo from './assets/logo.webp';
 import { CLOUD, staffLogin, useCloud, useKitchenQueue } from './data/cloud';
 import { localAddress, waitMinutes } from './lib/rules';
-import { OrderTracker, useTracking } from './screens/OrderTracker';
+import { OrderTracker, TrackingPage, useTracking } from './screens/OrderTracker';
+import { DriversPanel } from './screens/DriversPanel';
 import { DeviceSetup, Loading } from './screens/Device';
 
 function useHash() {
@@ -30,6 +31,7 @@ export default function App() {
   const hash = useHash();
   const cloud = useCloud();
   if (hash === '#carta') return cloud.catalogReady ? <CustomerApp /> : <Loading text="Cargando la carta…" />;
+  if (hash.startsWith('#seguir-')) return <TrackingPage id={decodeURIComponent(hash.slice('#seguir-'.length))} />;
   // Sin usuario: la portada es para clientes; el personal entra por "#personal" (o este celular ya es del personal).
   if (!user || (CLOUD && cloud.status !== 'ready')) {
     const staffView = hash === '#personal' || isStaffDevice();
@@ -40,23 +42,23 @@ export default function App() {
   }
   switch (user.role) {
     case 'admin': return <AdminScreen />;
-    case 'mozo': return <RoleShell label="Mesas" main={<WaiterScreen />} />;
-    case 'delivery': return <RoleShell label="Tomar pedido" main={<DeliveryScreen />} />;
+    case 'mozo': return <RoleShell label="Mesas" main={<WaiterScreen />} drivers />;
+    case 'delivery': return <RoleShell label="Tomar pedido" main={<DeliveryScreen />} drivers />;
     case 'cocina': return <RoleShell label="Cocina" main={<KitchenScreen />} local={user.localId ?? 'all'} />;
     case 'driver': return <RoleShell label="Mis entregas" main={<DriverScreen />} />;
   }
 }
 
 /** Pantalla de trabajo + Registro de pedidos (todos ven los estados). */
-function RoleShell({ label, main, local = 'all' }: { label: string; main: ReactNode; local?: string }) {
-  const [tab, setTab] = useState<'main' | 'log'>('main');
+function RoleShell({ label, main, local = 'all', drivers }: { label: string; main: ReactNode; local?: string; drivers?: boolean }) {
+  const [tab, setTab] = useState<'main' | 'log' | 'drivers'>('main');
   return (
     <>
       <TopBar />
       <div className="role-tabs">
-        <Tabs value={tab} onChange={setTab} options={[{ value: 'main', label }, { value: 'log', label: 'Registro de pedidos' }]} />
+        <Tabs value={tab} onChange={setTab} options={[{ value: 'main', label }, { value: 'log', label: 'Registro' }, ...(drivers ? [{ value: 'drivers' as const, label: 'Drivers' }] : [])]} />
       </div>
-      {tab === 'main' ? main : <OrderLog defaultLocal={local} />}
+      {tab === 'main' ? main : tab === 'log' ? <OrderLog defaultLocal={local} /> : <DriversPanel />}
     </>
   );
 }
@@ -139,7 +141,7 @@ function Landing() {
       <main className="landing-main">
         <img className="landing-logo" src={logo} alt={db.settings.businessName} width={640} height={453} />
         <h1>Salvándote la cena</h1>
-        <p className="landing-sub"><b>Comida urbana de cocina rápida</b><br />Broster + Salchipapa + Hamburguesas + Snacks + Refrescos</p>
+        <p className="landing-sub"><b>Restaurante urbano de comida rápida</b><br />Broster + Salchipapa + Hamburguesas + Snacks + Refrescos</p>
         <a className="btn landing-cta" href="#carta">🍗 Ver la carta y pedir</a>
         {tracking[0] && <button className="btn block" onClick={() => setTrack(tracking[0].id)}>📦 Ver estado de mi pedido</button>}
         <ul className="landing-facts">

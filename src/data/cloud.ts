@@ -192,6 +192,7 @@ async function loadAll() {
     }
     subscribeRealtime();
     void loadRequests();
+    void loadDriverLocations();
     setState({ status: 'ready', catalogReady: true });
     kick();
   } catch (e) {
@@ -240,6 +241,10 @@ function subscribeRealtime() {
       const row = p.new as { id?: string; data?: Catalog | Staff };
       if (!row?.id || !row.data || !api || queue.has(`doc:${row.id}`)) return;
       api.replaceDb({ ...api.getDb(), ...row.data });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_locations' }, (p) => {
+      const row = p.new as DriverLocation;
+      if (row?.user_id) upsertDriverLocation(row);
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'order_requests' }, (p) => {
       const row = p.new as OrderRequest;
@@ -489,4 +494,42 @@ export async function resolveRequest(id: string, status: 'aceptado' | 'rechazado
   const cur = requests.find((x) => x.id === id);
   if (cur) upsertRequest({ ...cur, ...patch } as OrderRequest);
   await supabase.from('order_requests').update(patch).eq('id', id);
+}
+
+// ---------- Ubicación de drivers ----------
+
+export interface DriverLocation { user_id: string; lat: number; lng: number; accuracy: number | null; heading: number | null; speed: number | null; updated_at: string }
+
+let locations: DriverLocation[] = [];
+const locListeners = new Set<() => void>();
+const setLocations = (next: DriverLocation[]) => { locations = next; locListeners.forEach((l) => l()); };
+export function useDriverLocations(): DriverLocation[] {
+  return useSyncExternalStore((l) => { locListeners.add(l); return () => { locListeners.delete(l); }; }, () => locations, () => locations);
+}
+export async function loadDriverLocations() {
+  if (!supabase) return;
+  const r = await supabase.from('driver_locations').select('*');
+  if (!r.error) setLocations(r.data as DriverLocation[]); // si falta la tabla (05-ubicacion-drivers.sql), se ignora
+}
+export function upsertDriverLocation(row: DriverLocation) {
+  const i = locations.findIndex((x) => x.user_id === row.user_id);
+  const next = locations.slice();
+  if (i >= 0) next[i] = row; else next.push(row);
+  setLocations(next);
+}
+
+/** El celular del driver envía su ubicación. Devuelve un error o null. */
+export async function sendMyLocation(c: GeolocationCoordinates): Promise<string | null> {
+  if (!supabase) return null;
+  const r = await supabase.rpc('update_my_location', { p_lat: c.latitude, p_lng: c.longitude, p_accuracy: c.accuracy ?? null, p_heading: c.heading ?? null, p_speed: c.speed ?? null });
+  return r.error ? r.error.message : null;
+}
+
+/** Seguimiento para el cliente (código del pedido web o del pedido). Incluye la ubicación del driver si está en camino. */
+export async function trackOrder(ref: string): Promise<(RequestStatus & { location: { lat: number; lng: number; updated_at: string } | null }) | null> {
+  if (!supabase) return null;
+  const r = await supabase.rpc('track_order', { p_ref: ref });
+  if (!r.error) return r.data;
+  const old = await fetchRequestStatus(ref); // sin 05-ubicacion-drivers.sql
+  return old ? { ...old, location: null } : null;
 }
