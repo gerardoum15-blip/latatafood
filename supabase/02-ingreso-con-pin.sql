@@ -133,3 +133,6 @@ on conflict (user_id) do nothing;
 update public.app_docs
 set data = jsonb_set(data, '{users}', (select coalesce(jsonb_agg(u - 'pin'), '[]'::jsonb) from jsonb_array_elements(data -> 'users') u))
 where id = 'staff';
+
+-- Que Supabase reconozca al instante las funciones nuevas.
+notify pgrst, 'reload schema';

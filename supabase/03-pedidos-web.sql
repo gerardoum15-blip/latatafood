@@ -54,3 +54,6 @@ begin
     alter publication supabase_realtime add table public.order_requests;
   end if;
 end $$;
+
+-- Que Supabase reconozca al instante las funciones nuevas.
+notify pgrst, 'reload schema';
