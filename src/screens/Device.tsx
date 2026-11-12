@@ -39,8 +39,8 @@ export function Loading({ text = 'Cargando…' }: { text?: string }) {
         <h1 className="login-logo"><img src={logo} alt="La Tata Food" width={640} height={453} /></h1>
         {cloud.status === 'error' ? (
           <>
-            <p className="err-text">No se pudieron cargar los datos. Revisa tu conexión a internet.</p>
-            <p className="muted small">{cloud.error}</p>
+            <p className="err-text">No se pudieron cargar los datos.</p>
+            <p className="muted">{cloud.error}</p>
             <button className="btn primary block" onClick={retryLoad}>Reintentar</button>
           </>
         ) : <p className="muted">{text}</p>}

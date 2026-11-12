@@ -122,11 +122,24 @@ async function loadAll() {
     setState({ status: 'ready', catalogReady: true });
     kick();
   } catch (e) {
-    setState({ status: 'error', error: e instanceof Error ? e.message : String(e) });
+    setState({ status: 'error', error: describeError(e) });
   }
 }
 
 export function retryLoad() { loadAll(); }
+
+/** Mensaje entendible para los errores de Supabase. */
+function describeError(e: unknown): string {
+  const err = (e ?? {}) as { code?: string; message?: string };
+  if (err.code === 'PGRST205' || err.code === '42P01' || /schema cache|does not exist/i.test(err.message ?? '')) {
+    return 'Faltan las tablas en Supabase: ejecuta el texto de configuración en el SQL Editor (Paso 3) y toca Reintentar.';
+  }
+  if (err.code === '42501' || /permission|row-level/i.test(err.message ?? '')) {
+    return 'Supabase no dio permiso. Revisa que el usuario sea personal@latatafood.app y que se haya ejecutado el Paso 3.';
+  }
+  if (e instanceof TypeError || /fetch|network/i.test(err.message ?? '')) return 'Sin conexión a internet.';
+  return [err.code, err.message].filter(Boolean).join(' · ') || String(e);
+}
 
 function subscribeRealtime() {
   if (!supabase || channel) return;
