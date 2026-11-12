@@ -14,6 +14,11 @@ export interface Local {
   tables: number;
   /** Dirección que ven los clientes (ej. "Andahuaylas, Santa Anita"). */
   address?: string;
+  /** Enlace de Google Maps del local. */
+  mapsUrl?: string;
+  /** Horario de atención (hora de Lima, "HH:MM"). */
+  open?: string;
+  close?: string;
 }
 
 export interface User {

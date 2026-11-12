@@ -8,7 +8,7 @@ import { CLOUD, submitOrderRequest, useKitchenQueue, type WebOrder } from '../da
 import { OrderTracker, rememberTracking, useTracking } from './OrderTracker';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
-import { localAddress, payInfo, suggestPackaging, waitMinutes } from '../lib/rules';
+import { hoursLabel, localAddress, localMapsUrl, payInfo, suggestPackaging, waitMinutes } from '../lib/rules';
 import logo from '../assets/logo.webp';
 
 const KEY = 'pos-restaurante-cliente';
@@ -251,7 +251,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
                     <button key={l.id} className={localId === l.id ? 'seg active' : 'seg'} onClick={() => setLocalId(l.id)}>{l.name}</button>
                   ))}
                 </div>
-                {local && <p className="muted small">{localAddress(local)}</p>}
+                {local && <p className="muted small">{localAddress(local)} · {hoursLabel(local)}{localMapsUrl(local) && <> · <a href={localMapsUrl(local)} target="_blank" rel="noreferrer">Ver ubicación</a></>}</p>}
                 {mode === 'mesa' && (
                   <label className="field"><span>Número de tu mesa</span><input id="c-table" type="number" inputMode="numeric" min={1} max={local?.tables ?? 99} value={table} onChange={(e) => setTable(e.target.value)} placeholder="Ej. 4" /><span className="muted small">En mesa no se cobra empaque.</span></label>
                 )}

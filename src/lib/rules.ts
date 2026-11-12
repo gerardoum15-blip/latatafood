@@ -24,6 +24,35 @@ const LOCAL_ADDRESS: Record<string, string> = {
 };
 export const localAddress = (l: Local) => l.address ?? LOCAL_ADDRESS[l.id] ?? '';
 
+const LOCAL_MAPS: Record<string, string> = {
+  'l-andahuaylas': 'https://maps.app.goo.gl/hbDLAoTjKRA4HDyL8',
+  'l-praderas': 'https://maps.app.goo.gl/nLZRbHarxgXBvNhQA',
+};
+export const localMapsUrl = (l: Local) => l.mapsUrl ?? LOCAL_MAPS[l.id] ?? '';
+export const localOpen = (l: Local) => l.open || '18:00';
+export const localClose = (l: Local) => l.close || '23:00';
+
+/** "18:00" -> "6:00 p. m." */
+export function hhmmLabel(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(m || 0).padStart(2, '0')} ${h < 12 ? 'a. m.' : 'p. m.'}`;
+}
+export const hoursLabel = (l: Local) => `${hhmmLabel(localOpen(l))} a ${hhmmLabel(localClose(l))}`;
+
+/** Minutos desde medianoche en hora de Lima. */
+function limaMinutes(d = new Date()): number {
+  const [h, m] = d.toLocaleTimeString('en-GB', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false }).split(':').map(Number);
+  return (h % 24) * 60 + m;
+}
+const toMin = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + (m || 0); };
+
+/** ¿El local está abierto ahora? (soporta horarios que pasan la medianoche) */
+export function isOpenNow(l: Local, d = new Date()): boolean {
+  const now = limaMinutes(d), o = toMin(localOpen(l)), c = toMin(localClose(l));
+  return o <= c ? now >= o && now < c : now >= o || now < c;
+}
+
 export const packagingTiers = (db: DB) => db.settings.packagingTiers?.length ? db.settings.packagingTiers : DEFAULT_PACKAGING_TIERS;
 export const packagingMax = (db: DB) => db.settings.packagingMax ?? DEFAULT_PACKAGING_MAX;
 export const waitTiers = (db: DB) => db.settings.waitTiers?.length ? db.settings.waitTiers : DEFAULT_WAIT_TIERS;

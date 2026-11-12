@@ -485,3 +485,8 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .track-map p { margin: 0; }
 .track-page h1::after { display: none; }
 .landing-logo.small { width: min(200px, 60vw); }
+.landing-locals li { gap: 4px; }
+.local-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.open-pill { font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: #eceaea; color: var(--muted); white-space: nowrap; }
+.open-pill.on { background: var(--ok-soft); color: var(--ok); }
+.local-map-btn { align-self: flex-start; margin-top: 4px; background: var(--ink); color: #ffffff; border-color: var(--ink); }

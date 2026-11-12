@@ -15,7 +15,7 @@ import { DriversPanel } from './DriversPanel';
 import { TicketButton } from '../components/TicketButton';
 import { TicketSettingsCard } from './TicketSettings';
 import { RulesSettings } from './RulesSettings';
-import { localAddress } from '../lib/rules';
+import { localAddress, localClose, localMapsUrl, localOpen } from '../lib/rules';
 import { CLOUD, setStaffPin, signOutDevice, useCloud } from '../data/cloud';
 
 type Section = 'monitor' | 'drivers' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
@@ -230,6 +230,11 @@ function SettingsScreen() {
               <label className="field inline"><span>Mesas</span><input type="number" inputMode="numeric" value={l.tables} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.tables = Math.max(0, Number(e.target.value)); })} /></label>
             </div>
             <input value={localAddress(l)} placeholder="Dirección (la ven los clientes)" aria-label={`Dirección de ${l.name}`} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.address = e.target.value; })} />
+            <input type="url" value={localMapsUrl(l)} placeholder="Enlace de Google Maps del local" aria-label={`Ubicación de ${l.name}`} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.mapsUrl = e.target.value; })} />
+            <div className="pay-line">
+              <label className="field inline"><span>Abre</span><input type="time" value={localOpen(l)} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.open = e.target.value; })} /></label>
+              <label className="field inline"><span>Cierra</span><input type="time" value={localClose(l)} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.close = e.target.value; })} /></label>
+            </div>
           </div>
         ))}
       </div>

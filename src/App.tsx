@@ -11,7 +11,7 @@ import { DriverScreen } from './screens/Driver';
 import { CustomerApp } from './screens/Customer';
 import logo from './assets/logo.webp';
 import { CLOUD, staffLogin, useCloud, useKitchenQueue } from './data/cloud';
-import { localAddress, waitMinutes } from './lib/rules';
+import { hhmmLabel, hoursLabel, isOpenNow, localAddress, localMapsUrl, localOpen, waitMinutes } from './lib/rules';
 import { OrderTracker, TrackingPage, useTracking } from './screens/OrderTracker';
 import { DriversPanel } from './screens/DriversPanel';
 import { DeviceSetup, Loading } from './screens/Device';
@@ -149,9 +149,20 @@ function Landing() {
           <li><b>WhatsApp</b><span><a href={`https://wa.me/51${wa}`} target="_blank" rel="noreferrer">{waText}</a></span></li>
         </ul>
         <ul className="landing-locals" aria-label="Nuestros locales">
-          {db.locales.map((l) => (
-            <li key={l.id}><b>{l.name}</b><span>{localAddress(l)}</span></li>
-          ))}
+          {db.locales.map((l) => {
+            const open = isOpenNow(l);
+            return (
+              <li key={l.id}>
+                <div className="local-row">
+                  <b>{l.name}</b>
+                  <span className={open ? 'open-pill on' : 'open-pill'}>{open ? 'Abierto ahora' : `Cerrado · abre ${hhmmLabel(localOpen(l))}`}</span>
+                </div>
+                <span>{localAddress(l)}</span>
+                <span>🕕 {hoursLabel(l)} · todos los días</span>
+                {localMapsUrl(l) && <a className="btn small local-map-btn" href={localMapsUrl(l)} target="_blank" rel="noreferrer">📍 Ver ubicación</a>}
+              </li>
+            );
+          })}
         </ul>
       </main>
       <footer className="landing-staff">
