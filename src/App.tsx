@@ -85,14 +85,14 @@ function Login() {
           <button onClick={() => setPin(pin.slice(0, -1))} aria-label="Borrar">⌫</button>
         </div>
         <a className="btn block customer-entry" href="#carta">🍗 Soy cliente · Ver la carta y pedir</a>
-        <details className="demo-users">
+        {!CLOUD && <details className="demo-users">
           <summary>Usuarios de prueba</summary>
           <ul>
             {users.map((u) => (
               <li key={u.id}><button className="link" onClick={() => login(u.id)}>{u.name}</button> <span className="muted">· {ROLE_LABEL[u.role]} · PIN {u.pin}</span></li>
             ))}
           </ul>
-        </details>
+        </details>}
       </div>
     </div>
   );
