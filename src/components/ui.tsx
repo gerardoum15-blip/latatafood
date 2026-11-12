@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { logout, useDb, useSession } from '../data/store';
 import { ROLE_LABEL, type Order, type OrderItem } from '../types';
+import { SyncBadge } from '../screens/Device';
 import { money } from '../lib/format';
 
 export function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
@@ -35,6 +36,7 @@ export function TopBar({ title, right }: { title?: string; right?: ReactNode }) 
       </div>
       {title && <div className="topbar-title">{title}</div>}
       <div className="topbar-right">
+        <SyncBadge />
         {right}
         <button className="btn ghost small" onClick={logout}>Salir</button>
       </div>

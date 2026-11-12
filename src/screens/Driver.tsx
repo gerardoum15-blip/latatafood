@@ -1,6 +1,6 @@
 import { assignDriver, orderTotal, setDeliveryStatus, useDb, useSession } from '../data/store';
 import { DELIVERY_LABEL, KITCHEN_LABEL, PAY_LABEL, type Order } from '../types';
-import { money, minutesAgo, time } from '../lib/format';
+import { money, minutesAgo, time, orderNo } from '../lib/format';
 import { fillTemplate, mapsLink, waLink } from '../lib/whatsapp';
 import { Empty, ItemLines, useTick } from '../components/ui';
 
@@ -36,7 +36,7 @@ export function DriverScreen() {
         <summary>Entregados hoy: {today.length} · efectivo cobrado {money(cashToday)}</summary>
         <ul className="list">
           {today.map((o) => (
-            <li key={o.id}><span className="grow">#{o.number} · {o.customer?.name}</span><span className="muted small">{o.closedAt ? time(o.closedAt) : ''}</span><b>{money(orderTotal(o))}</b></li>
+            <li key={o.id}><span className="grow">{orderNo(o)} · {o.customer?.name}</span><span className="muted small">{o.closedAt ? time(o.closedAt) : ''}</span><b>{money(orderTotal(o))}</b></li>
           ))}
         </ul>
       </details>
@@ -65,7 +65,7 @@ function DriverCard({ order, available }: { order: Order; available?: boolean })
   return (
     <article className="card order-card">
       <div className="row between wrap">
-        <b>#{order.number} · {c.name}</b>
+        <b>{orderNo(order)} · {c.name}</b>
         <span className="local-badge small">{local?.name}</span>
       </div>
       <div className="row gap wrap">

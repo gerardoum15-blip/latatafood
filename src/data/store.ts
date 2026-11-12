@@ -4,6 +4,7 @@ import type {
 } from '../types';
 import { DELIVERY_LABEL, KITCHEN_LABEL } from '../types';
 import { createSeed } from './seed';
+import { CLOUD, queueChanges, startCloud } from './cloud';
 
 /**
  * Almacenamiento local (modo demo, un solo dispositivo; sincroniza entre pestañas).
@@ -11,7 +12,7 @@ import { createSeed } from './seed';
  * después por una base de datos en la nube (Supabase) sin tocar las pantallas.
  */
 
-const KEY = 'pos-restaurante-db-v6';
+const KEY = CLOUD ? 'latatafood-cache-v1' : 'pos-restaurante-db-v6';
 const SESSION_KEY = 'pos-restaurante-session';
 
 function safeGet(key: string): string | null {
@@ -35,7 +36,7 @@ function load(): DB {
 let db: DB = load();
 const listeners = new Set<() => void>();
 let channel: BroadcastChannel | null = null;
-try { channel = new BroadcastChannel('pos-restaurante'); } catch { channel = null; }
+if (!CLOUD) { try { channel = new BroadcastChannel('pos-restaurante'); } catch { channel = null; } }
 
 function emit() { listeners.forEach((l) => l()); }
 
@@ -51,7 +52,7 @@ function reloadFromStorage() {
 }
 
 channel?.addEventListener('message', reloadFromStorage);
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !CLOUD) {
   window.addEventListener('storage', (e) => { if (e.key === KEY) reloadFromStorage(); });
 }
 
@@ -66,13 +67,29 @@ export function useDb(): DB {
   return useSyncExternalStore(subscribe, getDb, getDb);
 }
 
+/**
+ * Aplica un cambio. Los pedidos se copian solo cuando se modifican (ver withOrder),
+ * así la nube sabe exactamente qué pedidos cambiaron.
+ */
 export function mutate(fn: (draft: DB) => void) {
-  const draft = structuredClone(db);
+  const prev = db;
+  const { orders, ...rest } = db;
+  const draft: DB = { ...structuredClone(rest), orders: orders.slice() };
   fn(draft);
   db = draft;
   persist();
   emit();
+  queueChanges(prev, draft);
 }
+
+/** Reemplaza los datos con lo recibido de la nube (sin volver a enviarlo). */
+function replaceDb(next: DB) {
+  db = next;
+  persist();
+  emit();
+}
+
+if (typeof window !== 'undefined') void startCloud({ getDb, replaceDb });
 
 export const uid = (prefix = 'id') =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -137,8 +154,9 @@ export interface NewOrderInput {
 export function createOrder(input: NewOrderInput, user: User): string {
   const id = uid('o');
   mutate((d) => {
-    const n = (d.counters[input.localId] ?? 0) + 1;
-    d.counters[input.localId] = n;
+    // En la nube el número lo asigna el servidor (0 = pendiente).
+    const n = CLOUD ? 0 : (d.counters[input.localId] ?? 0) + 1;
+    if (!CLOUD) d.counters[input.localId] = n;
     const now = Date.now();
     d.orders.push({
       id,
@@ -166,8 +184,11 @@ export function createOrder(input: NewOrderInput, user: User): string {
 
 function withOrder(orderId: string, fn: (o: Order, d: DB) => void) {
   mutate((d) => {
-    const o = d.orders.find((x) => x.id === orderId);
-    if (o) fn(o, d);
+    const i = d.orders.findIndex((x) => x.id === orderId);
+    if (i < 0) return;
+    const o = structuredClone(d.orders[i]);
+    d.orders[i] = o;
+    fn(o, d);
   });
 }
 

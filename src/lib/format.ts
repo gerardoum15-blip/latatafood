@@ -29,3 +29,6 @@ export function daysLabel(days?: number[]): string {
   if (s.join() === '6,0') return 'Fines de semana';
   return s.map((d) => DAY_SHORT[d]).join(', ');
 }
+
+/** Número visible del pedido ("#…" mientras el servidor lo asigna). */
+export const orderNo = (o: { number: number }) => (o.number ? `#${o.number}` : '#…');

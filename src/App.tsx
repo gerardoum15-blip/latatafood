@@ -10,6 +10,8 @@ import { KitchenScreen } from './screens/Kitchen';
 import { DriverScreen } from './screens/Driver';
 import { CustomerApp } from './screens/Customer';
 import logo from './assets/logo.webp';
+import { CLOUD, useCloud } from './data/cloud';
+import { DeviceSetup, Loading } from './screens/Device';
 
 function useHash() {
   const [h, setH] = useState(() => (typeof location !== 'undefined' ? location.hash : ''));
@@ -24,7 +26,10 @@ function useHash() {
 export default function App() {
   const user = useSession();
   const hash = useHash();
-  if (hash === '#carta') return <CustomerApp />;
+  const cloud = useCloud();
+  if (hash === '#carta') return cloud.catalogReady ? <CustomerApp /> : <Loading text="Cargando la carta…" />;
+  if (CLOUD && cloud.status === 'signed-out') return <DeviceSetup />;
+  if (CLOUD && cloud.status !== 'ready') return <Loading />;
   if (!user) return <Login />;
   switch (user.role) {
     case 'admin': return <AdminScreen />;

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { generateDemoSales, mutate, orderTotal, resetAll, uid, useDb, useSession } from '../data/store';
 import { PAY_LABEL, ROLE_LABEL, type Role, type User } from '../types';
-import { dateTime, money } from '../lib/format';
+import { dateTime, money, orderNo } from '../lib/format';
 import { periodRange, PERIOD_LABEL, type Period } from '../lib/reports';
 import { LocalPicker } from '../components/shared';
 import { ConfirmButton, Empty, Modal, TopBar } from '../components/ui';
@@ -11,6 +11,7 @@ import { KitchenScreen } from './Kitchen';
 import { ReportsScreen } from './Reports';
 import { MenuAdmin } from './MenuAdmin';
 import { OrderLog } from './OrderLog';
+import { CLOUD, signOutDevice } from '../data/cloud';
 
 type Section = 'monitor' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
 
@@ -92,7 +93,7 @@ function Tickets() {
               {list.map((o) => (
                 <tr key={o.id} className={sel.has(o.id) ? 'selected' : ''} onClick={() => toggle(o.id)}>
                   <td><input type="checkbox" aria-label={`Seleccionar ticket ${o.number}`} checked={sel.has(o.id)} onChange={() => toggle(o.id)} onClick={(e) => e.stopPropagation()} /></td>
-                  <td><b>#{o.number}</b><div className="muted small">{db.locales.find((l) => l.id === o.localId)?.name}</div><div className="muted small show-sm">{dateTime(o.closedAt!)}</div></td>
+                  <td><b>{orderNo(o)}</b><div className="muted small">{db.locales.find((l) => l.id === o.localId)?.name}</div><div className="muted small show-sm">{dateTime(o.closedAt!)}</div></td>
                   <td className="small hide-sm">{dateTime(o.closedAt!)}</td>
                   <td className="small">{o.channel === 'salon' ? `Mesa ${o.table}` : `Delivery · ${o.customer?.name}`}<div className="muted">{o.items.map((i) => `${i.qty}× ${i.name}`).join(', ')}</div></td>
                   <td className="small hide-sm">{o.payments.map((p) => PAY_LABEL[p.method]).join(' + ')}</td>
@@ -211,15 +212,23 @@ function SettingsScreen() {
         <label className="field"><span>Botón “Estoy en camino”</span><textarea id="msg-camino" rows={3} value={s.msgEnCamino} onChange={(e) => setS({ msgEnCamino: e.target.value })} /></label>
         <label className="field"><span>Botón “Ya llegué”</span><textarea id="msg-llegue" rows={3} value={s.msgLlegue} onChange={(e) => setS({ msgLlegue: e.target.value })} /></label>
       </div>
-      <div className="card">
-        <h3>Datos de prueba</h3>
-        <p className="muted small">Por ahora los datos se guardan solo en este dispositivo. Cuando conectemos la base de datos en la nube se compartirán entre todos los usuarios.</p>
-        <div className="row gap wrap">
-          <button className="btn" onClick={() => { generateDemoSales(60); setDone('Se generaron ventas de ejemplo de los últimos 60 días. Revisa Reportes.'); }}>Generar ventas de ejemplo</button>
-          <ConfirmButton label="Reiniciar todo" title="Reiniciar todo" message="Se borrarán todos los pedidos, usuarios y cambios de la carta, y volverá la carta de ejemplo." confirmLabel="Borrar todo" onConfirm={() => { resetAll(); setDone('Datos reiniciados.'); }} />
+      {CLOUD ? (
+        <div className="card">
+          <h3>Este celular</h3>
+          <p className="muted small">Conectado a la base de datos de La Tata Food. Los pedidos se comparten en tiempo real con todos los celulares del personal.</p>
+          <ConfirmButton label="Desconectar este celular" title="Desconectar este celular" message="Para volver a usar la app en este celular habrá que escribir la clave del local." confirmLabel="Desconectar" onConfirm={() => { void signOutDevice(); }} />
         </div>
-        {done && <p className="notice">{done}</p>}
-      </div>
+      ) : (
+        <div className="card">
+          <h3>Datos de prueba</h3>
+          <p className="muted small">Por ahora los datos se guardan solo en este dispositivo.</p>
+          <div className="row gap wrap">
+            <button className="btn" onClick={() => { generateDemoSales(60); setDone('Se generaron ventas de ejemplo de los últimos 60 días. Revisa Reportes.'); }}>Generar ventas de ejemplo</button>
+            <ConfirmButton label="Reiniciar todo" title="Reiniciar todo" message="Se borrarán todos los pedidos, usuarios y cambios de la carta, y volverá la carta de ejemplo." confirmLabel="Borrar todo" onConfirm={() => { resetAll(); setDone('Datos reiniciados.'); }} />
+          </div>
+          {done && <p className="notice">{done}</p>}
+        </div>
+      )}
     </div>
   );
 }

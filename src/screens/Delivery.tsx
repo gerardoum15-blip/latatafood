@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { createOrder, getDb, orderTotal, useDb, useSession } from '../data/store';
+import { createOrder, orderTotal, useDb, useSession } from '../data/store';
 import { PAY_LABEL, type Customer, type PayMethod } from '../types';
-import { money } from '../lib/format';
+import { money, orderNo } from '../lib/format';
 import { LocalPicker, useWorkLocal } from '../components/shared';
 import { NewItems } from './Waiter';
 
@@ -17,7 +17,7 @@ export function DeliveryScreen() {
   const [customer, setCustomer] = useState<Customer>(EMPTY);
   const [pay, setPay] = useState<PayMethod>('efectivo');
   const [cashWith, setCashWith] = useState('');
-  const [sent, setSent] = useState<{ number: number; name: string; total: number } | null>(null);
+  const [sent, setSent] = useState<{ id: string; name: string; total: number } | null>(null);
   const [formKey, setFormKey] = useState(0);
 
   const local = db.locales.find((l) => l.id === localId);
@@ -28,7 +28,7 @@ export function DeliveryScreen() {
       <div className="page">
         <div className="card success-box">
           <span aria-hidden style={{ fontSize: '2.4rem' }}>✅</span>
-          <b>Pedido #{sent.number} enviado a cocina</b>
+          <b>Pedido {orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} enviado a cocina</b>
           <span className="muted">{sent.name} · {money(sent.total)} · {local?.name}</span>
           <button className="btn primary block" onClick={() => { setSent(null); setFormKey((k) => k + 1); }}>+ Tomar otro pedido</button>
         </div>
@@ -72,8 +72,7 @@ export function DeliveryScreen() {
           plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note,
         };
         const id = createOrder(input, user);
-        const number = getDb().orders.find((o) => o.id === id)?.number ?? 0;
-        setSent({ number, name: c.name, total: orderTotal({ items, deliveryFee: 0, packagingQty, packagingPrice: db.settings.packagingPrice ?? 0.5 }) });
+        setSent({ id, name: c.name, total: orderTotal({ items, deliveryFee: 0, packagingQty, packagingPrice: db.settings.packagingPrice ?? 0.5 }) });
         setCustomer(EMPTY); setCashWith(''); setPay('efectivo');
       }}
     />

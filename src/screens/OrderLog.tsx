@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { assignDriver, cancelOrder, orderTotal, packagingTotal, useDb, useSession } from '../data/store';
 import { PAY_LABEL, type Order } from '../types';
-import { dayKey, money, time } from '../lib/format';
+import { dayKey, money, time, orderNo } from '../lib/format';
 import { orderStage, stageHint, STAGE_LABEL, STAGES, type Stage } from '../lib/status';
 import { LocalPicker } from '../components/shared';
 import { ConfirmButton, Empty, ItemLines, Timeline, useTick } from '../components/ui';
@@ -69,7 +69,7 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
   return (
     <article className={`card log-ticket st-${st}`}>
       <div className="row between wrap">
-        <b>#{order.number} · {order.channel === 'salon' ? `Mesa ${order.table}` : `🛵 ${order.customer?.name}`}</b>
+        <b>{orderNo(order)} · {order.channel === 'salon' ? `Mesa ${order.table}` : `🛵 ${order.customer?.name}`}</b>
         <span className="stage-badge">{STAGE_LABEL[st]}{hint ? ` · ${hint}` : ''}</span>
       </div>
       <div className="muted small">
@@ -92,7 +92,7 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
               {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
-          <ConfirmButton className="btn small ghost danger" label="Anular" title={`Anular pedido #${order.number}`} message="El pedido no contará en las ventas." reason confirmLabel="Anular pedido" onConfirm={(r) => cancelOrder(order.id, r, me)} />
+          <ConfirmButton className="btn small ghost danger" label="Anular" title={`Anular pedido ${orderNo(order)}`} message="El pedido no contará en las ventas." reason confirmLabel="Anular pedido" onConfirm={(r) => cancelOrder(order.id, r, me)} />
         </div>
       )}
       <details>

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { setKitchenStatus, useDb, useSession } from '../data/store';
 import type { KitchenStatus, Order } from '../types';
-import { minutesAgo, time } from '../lib/format';
+import { minutesAgo, time, orderNo } from '../lib/format';
 import { LocalPicker, useWorkLocal } from '../components/shared';
 import { Empty, ItemLines, useTick } from '../components/ui';
 
@@ -85,7 +85,7 @@ function KitchenTicket({ order }: { order: Order }) {
     <article className={`kticket ${wait >= 20 && order.kitchenStatus !== 'listo' ? 'late' : ''}`}>
       <header>
         <b>{order.channel === 'salon' ? `🍽 Mesa ${order.table}` : `🛵 Delivery`}</b>
-        <span>#{order.number}</span>
+        <span>{orderNo(order)}</span>
       </header>
       <div className="muted small">
         {time(order.sentAt)} · hace {wait} min · {order.createdByName}

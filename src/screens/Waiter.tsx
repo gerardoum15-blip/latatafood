@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { addItems, cancelOrder, createOrder, markServed, orderTotal, payOrder, useDb, useSession } from '../data/store';
 import { KITCHEN_LABEL, type Order, type OrderItem } from '../types';
-import { money, minutesAgo, time } from '../lib/format';
+import { money, minutesAgo, time, orderNo } from '../lib/format';
 import { buildCreamItem, OrderBuilder, type CreamPicks } from '../components/OrderBuilder';
 import { LocalPicker, PaymentModal, useWorkLocal } from '../components/shared';
 import { ConfirmButton, ItemLines, Timeline, useTick } from '../components/ui';
@@ -146,7 +146,7 @@ function OrderDetail({ order, onBack, onAdd }: { order: Order; onBack: () => voi
     <div className="page">
       <div className="section-head">
         <button className="btn ghost small" onClick={onBack}>← Mesas</button>
-        <h2>Mesa {order.table} · #{order.number}</h2>
+        <h2>Mesa {order.table} · {orderNo(order)}</h2>
       </div>
       <div className="card">
         <div className="row between wrap">
