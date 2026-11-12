@@ -9,6 +9,7 @@ import { beep } from './Kitchen';
 import { LocalPicker, useWorkLocal } from '../components/shared';
 import { NewItems, type InitialOrder } from './Waiter';
 import { Modal } from '../components/ui';
+import { TicketButton } from '../components/TicketButton';
 import { parseOrderMessage, webOrderToParsed, type ParsedOrder } from '../lib/parseOrder';
 
 const EMPTY: Customer = { name: '', phone: '', address: '', reference: '', mapsUrl: '' };
@@ -77,6 +78,7 @@ export function DeliveryScreen() {
           {sent.phone && (
             <a className="btn wa block" target="_blank" rel="noreferrer" href={waLink(sent.phone, `Hola ${sent.name.split(' ')[0]}, confirmamos tu pedido ${orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} de ${db.settings.businessName}. Total: ${money(sent.total)}${'\n'}Ya lo estamos preparando. Te avisaremos cuando salga el motorizado.`)}>Confirmar al cliente por WhatsApp</a>
           )}
+          {db.orders.find((o) => o.id === sent.id) && <TicketButton order={db.orders.find((o) => o.id === sent.id)!} className="btn block" label="🧾 Ver / enviar ticket" />}
           <button className="btn primary block" onClick={() => { setSent(null); setInitial(undefined); setImportInfo(null); setActiveReq(null); setFormKey((k) => k + 1); }}>+ Tomar otro pedido</button>
         </div>
       </div>

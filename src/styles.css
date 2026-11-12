@@ -416,3 +416,6 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .web-inbox h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
 .web-req { border-left: 6px solid var(--st-nuevo, #c2261d); display: flex; flex-direction: column; gap: 6px; }
 .web-req.done { border-left-color: var(--border); opacity: 0.7; }
+.ticket-img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; display: block; }
+.ticket-settings { display: flex; flex-direction: column; gap: 10px; }
+.ticket-logo { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }

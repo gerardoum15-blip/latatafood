@@ -3,6 +3,7 @@ import { addItems, cancelOrder, createOrder, markServed, orderTotal, payOrder, u
 import { KITCHEN_LABEL, type Order, type OrderItem } from '../types';
 import { money, minutesAgo, time, orderNo } from '../lib/format';
 import { buildCreamItem, OrderBuilder, type CreamPicks } from '../components/OrderBuilder';
+import { TicketButton } from '../components/TicketButton';
 import { LocalPicker, PaymentModal, useWorkLocal } from '../components/shared';
 import { ConfirmButton, ItemLines, Timeline, useTick } from '../components/ui';
 
@@ -164,6 +165,7 @@ function OrderDetail({ order, onBack, onAdd }: { order: Order; onBack: () => voi
           <button className="btn" onClick={onAdd}>+ Agregar ítems</button>
           {!order.served && order.kitchenStatus === 'listo' && <button className="btn ok" onClick={() => markServed(order.id, user)}>Marcar servido</button>}
           <button className="btn primary" onClick={() => setPaying(true)}>Cobrar {money(total)}</button>
+          <TicketButton order={order} className="btn" label="🧾 Ticket" />
           {user.role === 'admin' && (
             <ConfirmButton label="Anular" title={`Anular mesa ${order.table}`} message="El pedido no contará en las ventas." reason confirmLabel="Anular pedido" onConfirm={(r) => { cancelOrder(order.id, r, user); onBack(); }} />
           )}

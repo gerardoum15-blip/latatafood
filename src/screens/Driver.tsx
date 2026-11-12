@@ -3,6 +3,7 @@ import { DELIVERY_LABEL, KITCHEN_LABEL, PAY_LABEL, type Order } from '../types';
 import { money, minutesAgo, time, orderNo } from '../lib/format';
 import { fillTemplate, mapsLink, waLink } from '../lib/whatsapp';
 import { Empty, ItemLines, useTick } from '../components/ui';
+import { TicketButton } from '../components/TicketButton';
 
 export function DriverScreen() {
   const db = useDb();
@@ -85,6 +86,7 @@ function DriverCard({ order, available }: { order: Order; available?: boolean })
       <div className="row gap wrap">
         <a className="btn maps grow" href={mapsLink(c.mapsUrl, c.address)} target="_blank" rel="noreferrer">📍 Ver ubicación</a>
         <a className="btn grow" href={waLink(c.phone)} target="_blank" rel="noreferrer">💬 Chat</a>
+        <TicketButton order={order} className="btn grow" />
       </div>
 
       <details><summary>Ver pedido ({order.items.reduce((s, i) => s + i.qty, 0)} ítems)</summary><ItemLines items={order.items} /></details>

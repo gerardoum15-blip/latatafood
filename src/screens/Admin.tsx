@@ -11,6 +11,8 @@ import { KitchenScreen } from './Kitchen';
 import { ReportsScreen } from './Reports';
 import { MenuAdmin } from './MenuAdmin';
 import { OrderLog } from './OrderLog';
+import { TicketButton } from '../components/TicketButton';
+import { TicketSettingsCard } from './TicketSettings';
 import { CLOUD, setStaffPin, signOutDevice, useCloud } from '../data/cloud';
 
 type Section = 'monitor' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
@@ -97,7 +99,7 @@ function Tickets() {
                   <td className="small hide-sm">{dateTime(o.closedAt!)}</td>
                   <td className="small">{o.channel === 'salon' ? `Mesa ${o.table}` : `Delivery · ${o.customer?.name}`}<div className="muted">{o.items.map((i) => `${i.qty}× ${i.name}`).join(', ')}</div></td>
                   <td className="small hide-sm">{o.payments.map((p) => PAY_LABEL[p.method]).join(' + ')}</td>
-                  <td className="num">{money(orderTotal(o))}<div className="muted small show-sm">{o.payments.map((p) => PAY_LABEL[p.method]).join(' + ')}</div></td>
+                  <td className="num">{money(orderTotal(o))}<div><TicketButton order={o} className="btn small ghost" label="🧾" /></div><div className="muted small show-sm">{o.payments.map((p) => PAY_LABEL[p.method]).join(' + ')}</div></td>
                   <td className="hide-sm"><span className="status s-enviado">No emitido</span></td>
                 </tr>
               ))}
@@ -224,6 +226,7 @@ function SettingsScreen() {
           </div>
         ))}
       </div>
+      <TicketSettingsCard />
       <div className="card">
         <h3>Mensajes de WhatsApp al cliente</h3>
         <p className="muted small">Variables: {'{cliente} {numero} {negocio} {driver} {total} {pago} {local}'}</p>

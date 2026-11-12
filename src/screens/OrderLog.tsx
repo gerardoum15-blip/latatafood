@@ -5,6 +5,7 @@ import { dayKey, money, time, orderNo } from '../lib/format';
 import { orderStage, stageHint, STAGE_LABEL, STAGES, type Stage } from '../lib/status';
 import { LocalPicker } from '../components/shared';
 import { ConfirmButton, Empty, ItemLines, Timeline, useTick } from '../components/ui';
+import { TicketButton } from '../components/TicketButton';
 
 /** Registro de pedidos con color por estado. Lo ven todos los usuarios. */
 export function OrderLog({ admin, defaultLocal = 'all' }: { admin?: boolean; defaultLocal?: string }) {
@@ -82,7 +83,7 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
           {order.channel === 'delivery' && order.plannedPay ? PAY_LABEL[order.plannedPay] : order.payments.map((p) => PAY_LABEL[p.method]).join(' + ')}
           {pkg > 0 && ` · empaques ${order.packagingQty} (${money(pkg)})`}
         </span>
-        <b>{money(orderTotal(order))}</b>
+        <span className="row gap"><TicketButton order={order} /><b>{money(orderTotal(order))}</b></span>
       </div>
       {admin && !order.closed && (
         <div className="row gap wrap">

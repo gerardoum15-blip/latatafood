@@ -191,7 +191,19 @@ export interface Order {
   sunat: { status: SunatStatus; type: 'boleta' | 'factura' | null };
 }
 
+/** Ticket (imagen) que se envía al cliente. */
+export interface TicketSettings {
+  /** Logo como imagen (data URL). Vacío = logo de La Tata Food. */
+  logo: string;
+  title: string;
+  header: string;
+  footer: string;
+  showIgv: boolean;
+  igvRate: number;
+}
+
 export interface Settings {
+  ticket?: TicketSettings;
   businessName: string;
   whatsapp: string;
   packagingPrice: number;
