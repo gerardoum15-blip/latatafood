@@ -6,7 +6,7 @@ import { isUrl, waLink } from '../lib/whatsapp';
 import { minutesAgo } from '../lib/format';
 import { CLOUD, resolveRequest, useRequests, type OrderRequest } from '../data/cloud';
 import { beep } from './Kitchen';
-import { LocalPicker, useWorkLocal } from '../components/shared';
+import { LocalPicker } from '../components/shared';
 import { NewItems, type InitialOrder } from './Waiter';
 import { Modal } from '../components/ui';
 import { TicketButton } from '../components/TicketButton';
@@ -20,11 +20,14 @@ export function DeliveryScreen() {
   const db = useDb();
   const user = useSession()!;
   const fixed = user.role === 'delivery' && !!user.localId;
-  const [localId, setLocalId] = useWorkLocal(user.role === 'delivery' ? user.localId : null);
+  // El mozo delivery decide en cada pedido qué local lo prepara (según demanda o cercanía).
+  const defaultLocal = fixed ? user.localId! : '';
+  const [localId, setLocalId] = useState<string>(defaultLocal);
+  const priceLocal = localId || db.locales[0]?.id || '';
   const [customer, setCustomer] = useState<Customer>(EMPTY);
   const [pay, setPay] = useState<PayMethod>('efectivo');
   const [cashWith, setCashWith] = useState('');
-  const [sent, setSent] = useState<{ id: string; name: string; phone: string; total: number } | null>(null);
+  const [sent, setSent] = useState<{ id: string; name: string; phone: string; total: number; localName: string } | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [initial, setInitial] = useState<InitialOrder | undefined>(undefined);
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -51,7 +54,7 @@ export function DeliveryScreen() {
     setDineIn(r.dineIn);
     setPickup(r.pickup);
     setPayOk(false);
-    if (r.localId) setLocalId(r.localId);
+    setLocalId(r.localId ?? defaultLocal);
     if (r.pay) setPay(r.pay);
     setCashWith(r.cashWith ? String(r.cashWith) : '');
     setInitial({ cart: r.cart, picks: r.creamPicks, pkgAmount: r.packaging, note: [r.pickup ? 'RECOJO EN LOCAL' : '', r.dineIn ? 'COMER EN MESA' : '', r.note].filter(Boolean).join(' · ') });
@@ -60,14 +63,14 @@ export function DeliveryScreen() {
   };
 
   const importMessage = () => {
-    applyParsed(parseOrderMessage(pasteText, db, localId));
+    applyParsed(parseOrderMessage(pasteText, db, priceLocal));
     setActiveReq(null);
     setPasteOpen(false);
     setPasteText('');
   };
 
   const openRequest = (req: OrderRequest) => {
-    applyParsed(webOrderToParsed(req.data, db, localId));
+    applyParsed(webOrderToParsed(req.data, db, priceLocal));
     setActiveReq(req);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -76,7 +79,7 @@ export function DeliveryScreen() {
   const valid = dineIn
     ? !!(customer.name.trim() && dineIn.table)
     : !!(customer.name.trim() && customer.phone.trim() && (customer.address.trim() || isUrl(customer.mapsUrl)) && (!customer.mapsUrl.trim() || isUrl(customer.mapsUrl)));
-  const canSend = valid && (!activeReq || payOk);
+  const canSend = valid && !!localId && (!activeReq || payOk);
   const turnDriver = db.users.find((u) => u.id === nextDriver(db));
 
   if (sent) {
@@ -85,7 +88,7 @@ export function DeliveryScreen() {
         <div className="card success-box">
           <span aria-hidden style={{ fontSize: '2.4rem' }}>✅</span>
           <b>Pedido {orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} enviado a cocina</b>
-          <span className="muted">{sent.name} · {money(sent.total)} · {local?.name}</span>
+          <span className="muted">{sent.name} · {money(sent.total)} · {sent.localName}</span>
           {sent.phone && (
             <a className="btn wa block" target="_blank" rel="noreferrer" href={waLink(sent.phone, `Hola ${sent.name.split(' ')[0]}, confirmamos tu pedido ${orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} de ${db.settings.businessName}. Total: ${money(sent.total)}${'\n'}Ya lo estamos preparando. Te avisaremos cuando salga el motorizado.`)}>Confirmar al cliente por WhatsApp</a>
           )}
@@ -101,9 +104,9 @@ export function DeliveryScreen() {
       key={formKey}
       initial={initial}
       title="Nuevo pedido delivery"
-      localId={localId}
+      localId={priceLocal}
       canSend={canSend}
-      sendLabel={!valid ? (dineIn ? 'Falta el número de mesa' : 'Faltan datos del cliente') : !canSend ? 'Valida el pago primero' : 'Enviar a cocina'}
+      sendLabel={!localId ? 'Elige el local que prepara' : !valid ? (dineIn ? 'Falta el número de mesa' : 'Faltan datos del cliente') : !canSend ? 'Valida el pago primero' : 'Enviar a cocina'}
       extra={
         <>
         {CLOUD && (
@@ -177,6 +180,8 @@ export function DeliveryScreen() {
           <div className="full">
             <span className="muted small">Cocina que prepara el pedido</span>
             <LocalPicker value={localId} onChange={setLocalId} fixed={fixed} />
+            {!localId && <p className="err-text small">Elige qué local prepara este pedido (según la demanda o la cercanía al cliente).</p>}
+            {!localId && customer.mapsUrl && <p className="small"><a href={customer.mapsUrl} target="_blank" rel="noreferrer">Ver la ubicación del cliente en el mapa</a></p>}
           </div>
           <label className="field"><span>Nombre *</span><input id="d-name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} /></label>
           <label className="field"><span>Contacto (WhatsApp) *</span><input id="d-phone" type="tel" inputMode="tel" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="987654321" /></label>
@@ -210,8 +215,8 @@ export function DeliveryScreen() {
           }, user);
         }
         if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
-        setSent({ id, name: c.name, phone: c.phone, total: orderTotal({ items, deliveryFee: 0, packagingAmount: dineIn ? 0 : pkg.amount }) });
-        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false);
+        setSent({ id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: 0, packagingAmount: dineIn ? 0 : pkg.amount }) });
+        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal);
       }}
     />
   );

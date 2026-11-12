@@ -139,7 +139,7 @@ function Landing() {
       <main className="landing-main">
         <img className="landing-logo" src={logo} alt={db.settings.businessName} width={640} height={453} />
         <h1>Salvándote la cena</h1>
-        <p className="landing-sub">Broster, alitas, salchipapas y hamburguesas preparadas al instante. Delivery, recojo en local o para comer en mesa.</p>
+        <p className="landing-sub"><b>Comida urbana de cocina rápida</b><br />Broster + Salchipapa + Hamburguesas + Snacks + Refrescos</p>
         <a className="btn landing-cta" href="#carta">🍗 Ver la carta y pedir</a>
         {tracking[0] && <button className="btn block" onClick={() => setTrack(tracking[0].id)}>📦 Ver estado de mi pedido</button>}
         <ul className="landing-facts">
