@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { uid, useDb } from '../data/store';
 import { PAY_LABEL, type OrderItem, type PayMethod, type Product } from '../types';
 import { availableToday, daysLabel, money } from '../lib/format';
-import { isUrl, waLink } from '../lib/whatsapp';
+import { waLink } from '../lib/whatsapp';
+import { LocationPicker, mapsUrlFor, type PickedLocation } from '../components/LocationPicker';
+import { CLOUD, submitOrderRequest, type WebOrder } from '../data/cloud';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
 import { suggestPackaging } from './Waiter';
@@ -58,7 +60,9 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const [mode, setMode] = useState<'delivery' | 'recojo'>('delivery');
   const [localId, setLocalId] = useState(db.locales[0]?.id ?? '');
   const [address, setAddress] = useState('');
-  const [maps, setMaps] = useState('');
+  const [loc, setLoc] = useState<PickedLocation | null>(null);
+  const maps = loc ? mapsUrlFor(loc) : '';
+  const [sent, setSent] = useState<'ok' | 'wa-only' | null>(null);
   const [pay, setPay] = useState<PayMethod>('efectivo');
   const [cash, setCash] = useState('');
   const [note, setNote] = useState('');
@@ -79,7 +83,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const pkgQty = mode === 'delivery' ? suggestPackaging(cart, db) : 0;
   const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgQty * pkgPrice;
   const local = db.locales.find((l) => l.id === localId);
-  const ready = count > 0 && (mode === 'recojo' || address.trim() || isUrl(maps));
+  const ready = count > 0 && (mode === 'recojo' || !!address.trim());
 
   const message = useMemo(() => {
     const L: string[] = [];
@@ -89,7 +93,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
     if (mode === 'delivery') {
       L.push('Entrega: Delivery');
       if (address.trim()) L.push(`Dirección: ${address.trim()}`);
-      if (isUrl(maps)) L.push(`Ubicación: ${maps.trim()}`);
+      if (maps) L.push(`Ubicación: ${maps}`);
     } else {
       L.push(`Entrega: Recojo en ${local?.name ?? 'local'}`);
     }
@@ -155,6 +159,13 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
         })}
       </main>
 
+      {sent && (
+        <Modal title="¡Pedido enviado!" onClose={() => setSent(null)} footer={<button className="btn primary block" onClick={() => setSent(null)}>Volver a la carta</button>}>
+          <p>Gracias, {client.name.split(' ')[0]}. Recibimos tu pedido y lo estamos revisando.</p>
+          <p className="muted">Te confirmaremos por WhatsApp. Si no se abrió WhatsApp, escríbenos al {db.settings.whatsapp}.</p>
+        </Modal>
+      )}
+
       {count > 0 && (
         <div className="c-bar">
           <button className="btn primary block" onClick={() => setOpen(true)}>Ver mi pedido · {count} · {money(total)}</button>
@@ -170,9 +181,21 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
           <div className="driver-actions">
             <div className="total-row"><span>Total{mode === 'delivery' ? ' (+ delivery según distancia)' : ''}</span><b>{money(total)}</b></div>
             {ready ? (
-              <a className="btn wa big-ok block" href={waLink(db.settings.whatsapp, message)} target="_blank" rel="noreferrer">💬 Enviar pedido por WhatsApp</a>
+              <a className="btn wa big-ok block" href={waLink(db.settings.whatsapp, message)} target="_blank" rel="noreferrer" onClick={() => {
+                // Registrar el pedido para que el mozo delivery lo valide (y además se abre WhatsApp con el resumen).
+                const data: WebOrder = {
+                  v: 1,
+                  customer: { name: client.name, phone: client.phone, address: mode === 'delivery' ? address.trim() : `Recojo en ${local?.name ?? 'local'}`, mapsUrl: mode === 'delivery' ? maps : '', lat: mode === 'delivery' ? loc?.lat ?? null : null, lng: mode === 'delivery' ? loc?.lng ?? null : null },
+                  mode, localId: mode === 'recojo' ? localId : null, pay, cashWith: pay === 'efectivo' && cash ? Number(cash) : null, note: note.trim(),
+                  items: cart, creamPicks: picks, packagingQty: pkgQty, total,
+                };
+                const ok = CLOUD;
+                if (ok) void submitOrderRequest(data);
+                setSent(ok ? 'ok' : 'wa-only');
+                setOpen(false); setCart([]); setPicks({}); setNote('');
+              }}>💬 Enviar pedido</a>
             ) : (
-              <button className="btn block" disabled>{count === 0 ? 'Agrega platos' : 'Escribe tu dirección o ubicación'}</button>
+              <button className="btn block" disabled>{count === 0 ? 'Agrega platos' : 'Marca tu ubicación o escribe tu dirección'}</button>
             )}
           </div>
         }>
@@ -201,8 +224,8 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
             </div>
             {mode === 'delivery' ? (
               <>
-                <label className="field"><span>Dirección</span><input id="c-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, referencia" /></label>
-                <label className="field"><span>Ubicación de Google Maps (opcional)</span><input id="c-maps" type="url" value={maps} onChange={(e) => setMaps(e.target.value)} placeholder="https://maps.app.goo.gl/…" />{maps.trim() && !isUrl(maps) && <span className="err-text small">Pega un enlace que empiece con https:// (en Google Maps: Compartir → Copiar enlace).</span>}</label>
+                <LocationPicker value={loc} onChange={setLoc} onAddress={setAddress} />
+                <label className="field"><span>Dirección de envío</span><input id="c-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, referencia" /><span className="muted small">Revisa y agrega referencias (piso, color de puerta…).</span></label>
                 {pkgQty > 0 && <p className="muted small">Empaques: {pkgQty} × {money(pkgPrice)} = {money(pkgQty * pkgPrice)}</p>}
               </>
             ) : (

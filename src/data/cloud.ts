@@ -187,6 +187,7 @@ async function loadAll() {
       if (state.pinServer) for (const u of local.users) if (u.pin) await setStaffPin(u.id, u.pin, u.role, u.active);
     }
     subscribeRealtime();
+    void loadRequests();
     setState({ status: 'ready', catalogReady: true });
     kick();
   } catch (e) {
@@ -230,9 +231,13 @@ function subscribeRealtime() {
       if (!row?.id || !row.data || !api || queue.has(`doc:${row.id}`)) return;
       api.replaceDb({ ...api.getDb(), ...row.data });
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'order_requests' }, (p) => {
+      const row = p.new as OrderRequest;
+      if (row?.id) upsertRequest(row);
+    })
     .subscribe((status) => {
       // Al reconectar, recargar para no perder cambios hechos mientras no había señal.
-      if (status === 'SUBSCRIBED' && state.status === 'ready') refreshOrders();
+      if (status === 'SUBSCRIBED' && state.status === 'ready') { refreshOrders(); void loadRequests(); }
     });
 }
 
@@ -369,4 +374,67 @@ async function saveOrder(id: string) {
     setLocalOrder(order);
   }
   throw new Error('No se pudo guardar el pedido');
+}
+
+// ---------- Pedidos web (enviados por clientes desde la carta) ----------
+
+export interface OrderRequest {
+  id: string;
+  created_at: string;
+  status: 'pendiente' | 'aceptado' | 'rechazado';
+  data: WebOrder;
+  handled_by: string | null;
+  order_id: string | null;
+  reason: string | null;
+}
+
+/** Lo que envía la carta del cliente. */
+export interface WebOrder {
+  v: 1;
+  customer: { name: string; phone: string; address: string; mapsUrl: string; lat: number | null; lng: number | null };
+  mode: 'delivery' | 'recojo';
+  localId: string | null;
+  pay: string;
+  cashWith: number | null;
+  note: string;
+  items: Order['items'];
+  creamPicks: Record<string, Record<string, number>>;
+  packagingQty: number;
+  total: number;
+}
+
+let requests: OrderRequest[] = [];
+const reqListeners = new Set<() => void>();
+const setRequests = (next: OrderRequest[]) => { requests = next; reqListeners.forEach((l) => l()); };
+export function useRequests(): OrderRequest[] {
+  return useSyncExternalStore((l) => { reqListeners.add(l); return () => { reqListeners.delete(l); }; }, () => requests, () => requests);
+}
+
+/** Cliente: registra el pedido para que el mozo delivery lo valide. Devuelve un error o null. */
+export async function submitOrderRequest(data: WebOrder): Promise<string | null> {
+  if (!supabase) return 'Sin conexión';
+  const r = await supabase.rpc('submit_order_request', { p_data: data });
+  return r.error ? r.error.message : null;
+}
+
+export async function loadRequests() {
+  if (!supabase) return;
+  const since = new Date(Date.now() - 2 * 86400000).toISOString();
+  const r = await supabase.from('order_requests').select('id,created_at,status,data,handled_by,order_id,reason').gte('created_at', since).order('created_at', { ascending: false });
+  if (!r.error) setRequests(r.data as OrderRequest[]); // si falta la tabla (03-pedidos-web.sql), se ignora
+}
+
+function upsertRequest(row: OrderRequest) {
+  const i = requests.findIndex((x) => x.id === row.id);
+  const next = requests.slice();
+  if (i >= 0) next[i] = { ...next[i], ...row }; else next.unshift(row);
+  setRequests(next);
+}
+
+export async function resolveRequest(id: string, status: 'aceptado' | 'rechazado', by: string, extra: { order_id?: string; reason?: string }) {
+  if (!supabase) return;
+  const patch = { status, handled_by: by, handled_at: new Date().toISOString(), ...extra };
+  const cur = requests.find((x) => x.id === id);
+  if (cur) upsertRequest({ ...cur, ...patch } as OrderRequest);
+  await supabase.from('order_requests').update(patch).eq('id', id);
 }

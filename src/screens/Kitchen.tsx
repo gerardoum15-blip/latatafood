@@ -12,7 +12,7 @@ const NEXT: Record<KitchenStatus, { to: KitchenStatus; label: string } | null> =
   listo: null,
 };
 
-function beep() {
+export function beep() {
   try {
     const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     [0, 0.25].forEach((delay) => {

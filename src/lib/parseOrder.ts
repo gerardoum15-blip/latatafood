@@ -2,6 +2,7 @@ import type { Customer, DB, ModifierGroup, OrderItem, PayMethod, Product } from 
 import { PAY_LABEL } from '../types';
 import { buildCreamItem, buildItem, type CreamPicks } from '../components/OrderBuilder';
 import { isUrl } from './whatsapp';
+import type { WebOrder } from '../data/cloud';
 
 export interface ParsedOrder {
   customer: Customer;
@@ -152,4 +153,37 @@ export function parseOrderMessage(text: string, db: DB, localId: string): Parsed
   }
 
   return { customer, pickup, localId: pickLocal, pay, cashWith, cart, creamPicks, packagingQty, note, messageTotal, computedTotal, warnings };
+}
+
+/**
+ * Convierte un pedido web (enviado desde la carta) en un pedido listo para revisar.
+ * Los platos se rearman con la carta actual, por si cambió algún precio.
+ */
+export function webOrderToParsed(data: WebOrder, db: DB, localId: string): ParsedOrder {
+  const warnings: string[] = [];
+  const useLocal = data.localId ?? localId;
+  const cart: OrderItem[] = [];
+  for (const it of data.items ?? []) {
+    if (it.productId.startsWith('extras:')) continue;
+    const product = db.products.find((p) => p.id === it.productId) ?? db.products.find((p) => norm(p.name) === norm(it.name));
+    if (!product) { warnings.push(`"${it.name}" ya no está en la carta: agrégalo a mano.`); continue; }
+    const picks: CreamPicks = {};
+    for (const m of it.modifiers) picks[m.groupId] = { ...(picks[m.groupId] ?? {}), [m.optionId]: m.qty };
+    cart.push(buildItem(db, product, useLocal, picks, it.qty, it.note ?? ''));
+  }
+  const creamPicks: CreamPicks = {};
+  for (const [gid, opts] of Object.entries(data.creamPicks ?? {})) if (db.groups.some((g) => g.id === gid)) creamPicks[gid] = opts;
+  const cream = buildCreamItem(db, cart, creamPicks);
+  const pkgPrice = db.settings.packagingPrice ?? 0.5;
+  const pkg = data.mode === 'delivery' ? data.packagingQty ?? 0 : 0;
+  const computedTotal = [...cart, ...(cream ? [cream] : [])].reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkg * pkgPrice;
+  if (Math.abs((data.total ?? 0) - computedTotal) > 0.009) {
+    warnings.push(`El cliente vio un total de S/ ${(data.total ?? 0).toFixed(2)} y con la carta actual es S/ ${computedTotal.toFixed(2)}. Revisa antes de confirmar.`);
+  }
+  const pay = (Object.keys(PAY_LABEL) as PayMethod[]).includes(data.pay as PayMethod) ? data.pay as PayMethod : null;
+  return {
+    customer: { name: data.customer.name, phone: data.customer.phone, address: data.customer.address, reference: '', mapsUrl: data.customer.mapsUrl ?? '' },
+    pickup: data.mode === 'recojo', localId: data.localId, pay, cashWith: data.cashWith, cart, creamPicks,
+    packagingQty: pkg, note: data.note ?? '', messageTotal: data.total, computedTotal, warnings,
+  };
 }

@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createOrder, orderTotal, useDb, useSession } from '../data/store';
 import { PAY_LABEL, type Customer, type PayMethod } from '../types';
 import { money, orderNo } from '../lib/format';
-import { isUrl } from '../lib/whatsapp';
+import { isUrl, waLink } from '../lib/whatsapp';
+import { minutesAgo } from '../lib/format';
+import { CLOUD, resolveRequest, useRequests, type OrderRequest } from '../data/cloud';
+import { beep } from './Kitchen';
 import { LocalPicker, useWorkLocal } from '../components/shared';
 import { NewItems, type InitialOrder } from './Waiter';
 import { Modal } from '../components/ui';
-import { parseOrderMessage } from '../lib/parseOrder';
+import { parseOrderMessage, webOrderToParsed, type ParsedOrder } from '../lib/parseOrder';
 
 const EMPTY: Customer = { name: '', phone: '', address: '', reference: '', mapsUrl: '' };
 const METHODS: PayMethod[] = ['efectivo', 'yape', 'plin', 'tarjeta', 'transferencia', 'pagado'];
@@ -20,15 +23,25 @@ export function DeliveryScreen() {
   const [customer, setCustomer] = useState<Customer>(EMPTY);
   const [pay, setPay] = useState<PayMethod>('efectivo');
   const [cashWith, setCashWith] = useState('');
-  const [sent, setSent] = useState<{ id: string; name: string; total: number } | null>(null);
+  const [sent, setSent] = useState<{ id: string; name: string; phone: string; total: number } | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [initial, setInitial] = useState<InitialOrder | undefined>(undefined);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [importInfo, setImportInfo] = useState<{ count: number; warnings: string[] } | null>(null);
 
-  const importMessage = () => {
-    const r = parseOrderMessage(pasteText, db, localId);
+  const requests = useRequests();
+  const pending = requests.filter((r) => r.status === 'pendiente').sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const [activeReq, setActiveReq] = useState<OrderRequest | null>(null);
+  const [rejecting, setRejecting] = useState<OrderRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const prevPending = useRef(pending.length);
+  useEffect(() => {
+    if (pending.length > prevPending.current) beep();
+    prevPending.current = pending.length;
+  }, [pending.length]);
+
+  const applyParsed = (r: ParsedOrder) => {
     setCustomer({ ...EMPTY, ...r.customer });
     if (r.localId) setLocalId(r.localId);
     if (r.pay) setPay(r.pay);
@@ -36,8 +49,19 @@ export function DeliveryScreen() {
     setInitial({ cart: r.cart, picks: r.creamPicks, pkgQty: r.packagingQty, note: [r.pickup ? 'RECOJO EN LOCAL' : '', r.note].filter(Boolean).join(' · ') });
     setFormKey((k) => k + 1);
     setImportInfo({ count: r.cart.reduce((s, i) => s + i.qty, 0), warnings: r.warnings });
+  };
+
+  const importMessage = () => {
+    applyParsed(parseOrderMessage(pasteText, db, localId));
+    setActiveReq(null);
     setPasteOpen(false);
     setPasteText('');
+  };
+
+  const openRequest = (req: OrderRequest) => {
+    applyParsed(webOrderToParsed(req.data, db, localId));
+    setActiveReq(req);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const local = db.locales.find((l) => l.id === localId);
@@ -50,7 +74,10 @@ export function DeliveryScreen() {
           <span aria-hidden style={{ fontSize: '2.4rem' }}>✅</span>
           <b>Pedido {orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} enviado a cocina</b>
           <span className="muted">{sent.name} · {money(sent.total)} · {local?.name}</span>
-          <button className="btn primary block" onClick={() => { setSent(null); setInitial(undefined); setImportInfo(null); setFormKey((k) => k + 1); }}>+ Tomar otro pedido</button>
+          {sent.phone && (
+            <a className="btn wa block" target="_blank" rel="noreferrer" href={waLink(sent.phone, `Hola ${sent.name.split(' ')[0]}, confirmamos tu pedido ${orderNo(db.orders.find((o) => o.id === sent.id) ?? { number: 0 })} de ${db.settings.businessName}. Total: ${money(sent.total)}${'\n'}Ya lo estamos preparando. Te avisaremos cuando salga el motorizado.`)}>Confirmar al cliente por WhatsApp</a>
+          )}
+          <button className="btn primary block" onClick={() => { setSent(null); setInitial(undefined); setImportInfo(null); setActiveReq(null); setFormKey((k) => k + 1); }}>+ Tomar otro pedido</button>
         </div>
       </div>
     );
@@ -66,6 +93,37 @@ export function DeliveryScreen() {
       sendLabel={valid ? 'Enviar a cocina' : 'Faltan datos del cliente'}
       extra={
         <>
+        {CLOUD && (
+          <section className="web-inbox" aria-label="Pedidos web por validar">
+            <h3>Pedidos web por validar <span className="count">{pending.length}</span></h3>
+            {pending.length === 0 && <p className="muted small">Cuando un cliente pida desde la carta, aparecerá aquí al instante.</p>}
+            {pending.map((r) => (
+              <article key={r.id} className={activeReq?.id === r.id ? 'card web-req active' : 'card web-req'}>
+                <div className="row between wrap"><b>{r.data.customer.name}</b><span className="muted small">hace {minutesAgo(new Date(r.created_at).getTime())} min</span></div>
+                <div className="small">{r.data.mode === 'recojo' ? 'Recojo en local' : r.data.customer.address}{r.data.customer.mapsUrl && <> · <a href={r.data.customer.mapsUrl} target="_blank" rel="noreferrer">ver mapa</a></>}</div>
+                <div className="muted small">{r.data.items.filter((i) => !i.productId.startsWith('extras:')).map((i) => `${i.qty}× ${i.name}`).join(', ')}</div>
+                <div className="row between wrap">
+                  <b>{money(r.data.total)}</b>
+                  <div className="row gap">
+                    <button className="btn small ghost danger" onClick={() => { setRejecting(r); setRejectReason(''); }}>Rechazar</button>
+                    <button className="btn small primary" onClick={() => openRequest(r)}>{activeReq?.id === r.id ? 'Revisando…' : 'Revisar'}</button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+        {rejecting && (
+          <Modal title={`Rechazar pedido de ${rejecting.data.customer.name}`} onClose={() => setRejecting(null)} footer={
+            <a className="btn wa block" target="_blank" rel="noreferrer"
+              href={waLink(rejecting.data.customer.phone, `Hola ${rejecting.data.customer.name.split(' ')[0]}, lo sentimos: no podemos atender tu pedido en ${db.settings.businessName}${rejectReason.trim() ? ` (${rejectReason.trim()})` : ''}. Escríbenos si deseas cambiar algo.`)}
+              onClick={() => { void resolveRequest(rejecting.id, 'rechazado', user.name, { reason: rejectReason.trim() }); if (activeReq?.id === rejecting.id) setActiveReq(null); setRejecting(null); }}>
+              Rechazar y avisar por WhatsApp
+            </a>
+          }>
+            <label className="field"><span>Motivo (lo verá el cliente)</span><input id="reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Ej. fuera de nuestra zona de reparto" /></label>
+          </Modal>
+        )}
         <button className="btn paste-btn block" onClick={() => setPasteOpen(true)}>📋 Pegar pedido de WhatsApp</button>
         {importInfo && (
           <div className={importInfo.warnings.length ? 'card import-info warn' : 'card import-info'} role="status">
@@ -110,7 +168,8 @@ export function DeliveryScreen() {
           plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note,
         };
         const id = createOrder(input, user);
-        setSent({ id, name: c.name, total: orderTotal({ items, deliveryFee: 0, packagingQty, packagingPrice: db.settings.packagingPrice ?? 0.5 }) });
+        if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
+        setSent({ id, name: c.name, phone: c.phone, total: orderTotal({ items, deliveryFee: 0, packagingQty, packagingPrice: db.settings.packagingPrice ?? 0.5 }) });
         setCustomer(EMPTY); setCashWith(''); setPay('efectivo');
       }}
     />
