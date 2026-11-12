@@ -87,7 +87,10 @@ async function resolveAccess() {
   let { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     const r = await supabase.auth.signInAnonymously();
-    if (r.error) { setState({ status: 'signed-out', pinServer: false }); return; } // ingreso anónimo desactivado
+    if (r.error) {
+      setState({ status: 'error', pinServer: false, error: `Supabase no permitió el ingreso con código (${r.error.message}). En Supabase > Authentication > Sign In / Providers activa "Allow new users to sign up" y "Allow anonymous sign-ins", guarda y recarga.` });
+      return;
+    }
     session = r.data.session;
   }
   const r = await supabase.rpc('my_staff_user');
@@ -96,7 +99,8 @@ async function resolveAccess() {
     if (r.error.code === 'PGRST202' || /could not find the function/i.test(r.error.message)) {
       // Modo antiguo (falta ejecutar 02-ingreso-con-pin.sql): clave del local + PIN guardado en la lista.
       setState({ pinServer: false });
-      if (email) await loadAll(); else setState({ status: 'signed-out' });
+      if (email) await loadAll();
+      else setState({ status: 'error', error: 'Falta un paso en Supabase: ejecuta el archivo 02-ingreso-con-pin.sql en el SQL Editor y recarga.' });
       return;
     }
     setState({ status: 'error', error: describeError(r.error) });

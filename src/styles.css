@@ -419,3 +419,25 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .ticket-img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; display: block; }
 .ticket-settings { display: flex; flex-direction: column; gap: 10px; }
 .ticket-logo { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
+
+/* Portada pública */
+.landing { min-height: 100dvh; display: flex; flex-direction: column; background: var(--bg); }
+.landing-main {
+  flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; justify-content: center;
+  padding-block: 32px 24px; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px));
+  max-width: 560px; margin: 0 auto; width: 100%;
+}
+.landing-logo { width: min(300px, 78vw); height: auto; }
+.landing h1 { font-size: clamp(1.7rem, 7vw, 2.3rem); text-transform: uppercase; letter-spacing: 0.01em; text-wrap: balance; color: var(--ink); }
+.landing h1::after { content: ""; display: block; width: 64px; height: 4px; background: var(--brand); margin: 12px auto 0; border-radius: 2px; }
+.landing-sub { margin: 0; color: var(--muted); max-width: 40ch; }
+.landing-cta { width: 100%; min-height: 64px; font-size: 1.2rem; background: var(--brand); color: #ffffff; border-color: var(--brand); border-radius: 16px; box-shadow: 0 6px 18px rgb(125 20 36 / 0.25); }
+.landing-facts { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
+.landing-facts li { min-width: 0; overflow-wrap: anywhere; }
+.landing-facts li { border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+.landing-facts b { color: var(--brand); }
+.landing-facts span { font-size: 0.82rem; color: var(--muted); }
+.landing-staff { text-align: center; padding-block: 18px calc(18px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); }
+.landing-staff a { color: var(--faint, #9a9494); font-size: 0.8rem; text-decoration: none; }
+.landing-staff a:hover, .landing-staff a:focus-visible { text-decoration: underline; color: var(--muted); }
+.staff-tag { margin: 0; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand); font-weight: 700; }
