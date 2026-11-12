@@ -1,5 +1,5 @@
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { DB, Order } from '../types';
 
 /**
@@ -217,6 +217,12 @@ function describeError(e: unknown): string {
 function subscribeRealtime() {
   if (!supabase || channel) return;
   channel = supabase.channel('latatafood')
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'orders' }, (p) => {
+      const id = (p.old as { id?: string })?.id;
+      if (!id || !api) return;
+      const d = api.getDb();
+      if (d.orders.some((o) => o.id === id)) api.replaceDb({ ...d, orders: d.orders.filter((o) => o.id !== id) });
+    })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (p) => {
       const row = p.new as { id?: string; version?: number; data?: Order };
       if (!row?.id || !row.data || !api) return;
@@ -396,7 +402,9 @@ export interface OrderRequest {
 export interface WebOrder {
   v: 1;
   customer: { name: string; phone: string; address: string; mapsUrl: string; lat: number | null; lng: number | null };
-  mode: 'delivery' | 'recojo';
+  mode: 'delivery' | 'recojo' | 'mesa';
+  /** Comer en mesa: número de mesa. */
+  table?: number | null;
   localId: string | null;
   pay: string;
   cashWith: number | null;
@@ -404,6 +412,9 @@ export interface WebOrder {
   items: Order['items'];
   creamPicks: Record<string, Record<string, number>>;
   packagingQty: number;
+  packagingAmount?: number;
+  /** Id que devuelve el servidor (para seguir el estado). */
+  requestId?: string;
   total: number;
 }
 
@@ -414,11 +425,48 @@ export function useRequests(): OrderRequest[] {
   return useSyncExternalStore((l) => { reqListeners.add(l); return () => { reqListeners.delete(l); }; }, () => requests, () => requests);
 }
 
-/** Cliente: registra el pedido para que el mozo delivery lo valide. Devuelve un error o null. */
-export async function submitOrderRequest(data: WebOrder): Promise<string | null> {
-  if (!supabase) return 'Sin conexión';
+/** Cliente: registra el pedido para que el mozo delivery lo valide. */
+export async function submitOrderRequest(data: WebOrder): Promise<{ id?: string; error?: string }> {
+  if (!supabase) return { error: 'Sin conexión' };
   const r = await supabase.rpc('submit_order_request', { p_data: data });
-  return r.error ? r.error.message : null;
+  return r.error ? { error: r.error.message } : { id: r.data as string };
+}
+
+/** Estado de un pedido web (para el cliente). */
+export interface RequestStatus {
+  status: 'pendiente' | 'aceptado' | 'rechazado'; reason: string | null; mode: string | null; number: number | null;
+  kitchen: string | null; delivery: string | null; served: boolean; closed: boolean; cancelled: boolean; driver: string | null;
+}
+export async function fetchRequestStatus(id: string): Promise<RequestStatus | null> {
+  if (!supabase) return null;
+  const r = await supabase.rpc('order_request_status', { p_id: id });
+  return r.error ? null : (r.data as RequestStatus | null);
+}
+
+/** Pedidos en cocina ahora (para estimar el tiempo de espera). null = no disponible. */
+export function useKitchenQueue(): number | null {
+  const [n, setN] = useState<number | null>(null);
+  useEffect(() => {
+    if (!supabase) return;
+    let alive = true;
+    const load = async () => {
+      const r = await supabase!.rpc('kitchen_queue');
+      if (alive && !r.error) setN(r.data as number);
+    };
+    void load();
+    const t = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  return n;
+}
+
+/** Borrar un pedido de la base de datos (solo administrador). */
+export async function deleteOrderCloud(id: string) {
+  if (!supabase) return;
+  queue.delete(`order:${id}`);
+  versions.delete(id);
+  base.delete(id);
+  await supabase.from('orders').delete().eq('id', id);
 }
 
 export async function loadRequests() {

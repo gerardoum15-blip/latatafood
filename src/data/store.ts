@@ -4,7 +4,7 @@ import type {
 } from '../types';
 import { DELIVERY_LABEL, KITCHEN_LABEL } from '../types';
 import { createSeed } from './seed';
-import { CLOUD, queueChanges, startCloud, staffLogout } from './cloud';
+import { CLOUD, deleteOrderCloud, queueChanges, startCloud, staffLogout } from './cloud';
 
 /**
  * Almacenamiento local (modo demo, un solo dispositivo; sincroniza entre pestañas).
@@ -127,10 +127,10 @@ export function logout() {
 export const orderSubtotal = (o: Pick<Order, 'items'>) =>
   o.items.reduce((s, i) => s + i.unitPrice * i.qty, 0);
 
-export const packagingTotal = (o: Pick<Order, 'packagingQty' | 'packagingPrice'>) =>
-  (o.packagingQty || 0) * (o.packagingPrice || 0);
+export const packagingTotal = (o: Pick<Order, 'packagingQty' | 'packagingPrice' | 'packagingAmount'>) =>
+  o.packagingAmount ?? (o.packagingQty || 0) * (o.packagingPrice || 0);
 
-export const orderTotal = (o: Pick<Order, 'items' | 'deliveryFee' | 'packagingQty' | 'packagingPrice'>) =>
+export const orderTotal = (o: Pick<Order, 'items' | 'deliveryFee' | 'packagingQty' | 'packagingPrice' | 'packagingAmount'>) =>
   orderSubtotal(o) + (o.deliveryFee || 0) + packagingTotal(o);
 
 function event(user: User, label: string) {
@@ -145,16 +145,29 @@ export interface NewOrderInput {
   deliveryFee: number;
   packagingQty?: number;
   packagingPrice?: number;
+  packagingAmount?: number;
   plannedPay: PayMethod | null;
   cashWith: number | null;
   driverId: string | null;
   items: OrderItem[];
   note: string;
+  /** Recojo en local: no se asigna driver. */
+  pickup?: boolean;
 }
 
-export function createOrder(input: NewOrderInput, user: User): string {
+/** Driver de turno: el que hace más tiempo no recibe un pedido (rotación). */
+export function nextDriver(d: DB): string | null {
+  const drivers = d.users.filter((u) => u.role === 'driver' && u.active);
+  if (!drivers.length) return null;
+  const last = new Map<string, number>();
+  for (const o of d.orders) if (o.channel === 'delivery' && o.driverId) last.set(o.driverId, Math.max(last.get(o.driverId) ?? 0, o.createdAt));
+  return [...drivers].sort((a, b) => (last.get(a.id) ?? 0) - (last.get(b.id) ?? 0))[0].id;
+}
+
+export function createOrder({ pickup, ...input }: NewOrderInput, user: User): string {
   const id = uid('o');
   mutate((d) => {
+    if (input.channel === 'delivery' && !pickup && !input.driverId) input = { ...input, driverId: nextDriver(d) };
     // En la nube el número lo asigna el servidor (0 = pendiente).
     const n = CLOUD ? 0 : (d.counters[input.localId] ?? 0) + 1;
     if (!CLOUD) d.counters[input.localId] = n;
@@ -176,7 +189,7 @@ export function createOrder(input: NewOrderInput, user: User): string {
       sentAt: now,
       readyAt: null,
       closedAt: null,
-      history: [event(user, 'Pedido creado y enviado a cocina')],
+      history: [event(user, 'Pedido creado y enviado a cocina'), ...(input.driverId ? [event(user, `Driver de turno: ${d.users.find((u) => u.id === input.driverId)?.name ?? ''}`)] : [])],
       sunat: { status: 'no_emitido', type: null },
     });
   });
@@ -249,6 +262,12 @@ export function payOrder(orderId: string, payments: Payment[], user: User) {
     o.closedAt = Date.now();
     o.history.push(event(user, 'Cobrado'));
   });
+}
+
+/** Borrar el pedido por completo (no cuenta en ventas ni aparece en el registro). */
+export function deleteOrder(orderId: string) {
+  mutate((d) => { d.orders = d.orders.filter((o) => o.id !== orderId); });
+  void deleteOrderCloud(orderId);
 }
 
 export function cancelOrder(orderId: string, reason: string, user: User) {

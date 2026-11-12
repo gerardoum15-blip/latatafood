@@ -87,8 +87,8 @@ async function paint(order: Order, db: DB, t: TicketSettings, logo: HTMLImageEle
     ],
     price: sol(it.unitPrice * it.qty),
   }));
-  if (order.packagingQty) {
-    rows.push({ qty: `${order.packagingQty}x`, name: 'COSTO DE EMPAQUE PARA LLEVAR ♻️', sub: [`${sol(order.packagingPrice ?? 0)} c/u`], price: sol(packagingTotal(order)) });
+  if (packagingTotal(order) > 0) {
+    rows.push({ qty: `${order.packagingQty || 1}x`, name: 'COSTO DE EMPAQUE PARA LLEVAR ♻️', sub: [], price: sol(packagingTotal(order)) });
   }
   const units = rows.reduce((s, r) => s + Number(r.qty.replace('x', '')), 0);
   set(23, 700, C.heavy); text(`${rows.length} items (Ctd.: ${units})`, PAD, y + 22); y += 50;

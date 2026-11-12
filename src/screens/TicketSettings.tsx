@@ -16,7 +16,7 @@ export function TicketSettingsCard() {
   // Ejemplo: el último pedido real, o uno de muestra.
   const sample: Order = [...db.orders].filter((o) => !o.cancelled).sort((a, b) => b.createdAt - a.createdAt)[0] ?? {
     id: 'muestra', number: 12061, localId: db.locales[0]?.id ?? '', channel: 'delivery', table: null,
-    customer: { name: 'Cliente', phone: '', address: '', reference: '', mapsUrl: '' }, deliveryFee: 3, packagingQty: 2, packagingPrice: 1,
+    customer: { name: 'Cliente', phone: '', address: '', reference: '', mapsUrl: '' }, deliveryFee: 3, packagingQty: 1, packagingAmount: 2,
     plannedPay: 'efectivo', cashWith: null, driverId: null, note: '', kitchenStatus: 'listo', deliveryStatus: 'entregado', served: false,
     closed: true, cancelled: false, payments: [{ method: 'efectivo', amount: 30 }], createdAt: Date.now(), createdBy: '', createdByName: '',
     sentAt: Date.now(), readyAt: null, closedAt: Date.now(), history: [], sunat: { status: 'no_emitido', type: null },

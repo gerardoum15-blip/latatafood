@@ -13,6 +13,8 @@ import { MenuAdmin } from './MenuAdmin';
 import { OrderLog } from './OrderLog';
 import { TicketButton } from '../components/TicketButton';
 import { TicketSettingsCard } from './TicketSettings';
+import { RulesSettings } from './RulesSettings';
+import { localAddress } from '../lib/rules';
 import { CLOUD, setStaffPin, signOutDevice, useCloud } from '../data/cloud';
 
 type Section = 'monitor' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
@@ -214,18 +216,21 @@ function SettingsScreen() {
       <div className="card">
         <label className="field"><span>Nombre del restaurante</span><input id="set-name" value={s.businessName} onChange={(e) => setS({ businessName: e.target.value })} /></label>
         <div className="field"><span>Enlace de la carta para clientes</span><a className="btn small" href="#carta">Abrir carta de clientes</a><span className="muted small">Comparte la dirección de la app terminada en <b>#carta</b>. Los clientes no necesitan PIN.</span></div>
-        <label className="field"><span>Costo de empaque por plato (S/)</span><input id="set-pkg" type="number" inputMode="decimal" step="0.1" value={s.packagingPrice ?? 0.5} onChange={(e) => setS({ packagingPrice: Number(e.target.value) })} /></label>
         <label className="field"><span>WhatsApp de pedidos</span><input id="set-wa" type="tel" value={s.whatsapp} onChange={(e) => setS({ whatsapp: e.target.value })} /></label>
       </div>
       <div className="card">
         <h3>Locales</h3>
         {db.locales.map((l) => (
-          <div key={l.id} className="pay-line">
-            <input value={l.name} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.name = e.target.value; })} aria-label="Nombre del local" />
-            <label className="field inline"><span>Mesas</span><input type="number" inputMode="numeric" value={l.tables} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.tables = Math.max(0, Number(e.target.value)); })} /></label>
+          <div key={l.id} className="local-edit">
+            <div className="pay-line">
+              <input value={l.name} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.name = e.target.value; })} aria-label="Nombre del local" />
+              <label className="field inline"><span>Mesas</span><input type="number" inputMode="numeric" value={l.tables} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.tables = Math.max(0, Number(e.target.value)); })} /></label>
+            </div>
+            <input value={localAddress(l)} placeholder="Dirección (la ven los clientes)" aria-label={`Dirección de ${l.name}`} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.address = e.target.value; })} />
           </div>
         ))}
       </div>
+      <RulesSettings />
       <TicketSettingsCard />
       <div className="card">
         <h3>Mensajes de WhatsApp al cliente</h3>

@@ -12,7 +12,6 @@ export function DriverScreen() {
 
   const deliveries = db.orders.filter((o) => o.channel === 'delivery' && !o.cancelled);
   const mine = deliveries.filter((o) => !o.closed && o.driverId === user.id).sort((a, b) => a.createdAt - b.createdAt);
-  const free = deliveries.filter((o) => !o.closed && !o.driverId).sort((a, b) => a.createdAt - b.createdAt);
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const today = deliveries.filter((o) => o.closed && o.driverId === user.id && (o.closedAt ?? 0) >= start.getTime());
   const cashToday = today.reduce((s, o) => s + o.payments.filter((p) => p.method === 'efectivo').reduce((a, p) => a + p.amount, 0), 0);
@@ -21,17 +20,11 @@ export function DriverScreen() {
     <div className="page">
       <section className="driver-section">
         <h2>Mis pedidos <span className="count">{mine.length}</span></h2>
-        {mine.length === 0 ? <Empty>No tienes pedidos. Toma uno de la lista de abajo.</Empty> : (
+        {mine.length === 0 ? <Empty>No tienes pedidos asignados. Te llegarán por turno.</Empty> : (
           <div className="cards">{mine.map((o) => <DriverCard key={o.id} order={o} />)}</div>
         )}
       </section>
 
-      <section className="driver-section">
-        <h2>Pedidos disponibles <span className="count">{free.length}</span></h2>
-        {free.length === 0 ? <Empty>No hay pedidos esperando driver.</Empty> : (
-          <div className="cards">{free.map((o) => <DriverCard key={o.id} order={o} available />)}</div>
-        )}
-      </section>
 
       <details className="card">
         <summary>Entregados hoy: {today.length} · efectivo cobrado {money(cashToday)}</summary>

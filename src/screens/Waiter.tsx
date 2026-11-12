@@ -3,6 +3,7 @@ import { addItems, cancelOrder, createOrder, markServed, orderTotal, payOrder, u
 import { KITCHEN_LABEL, type Order, type OrderItem } from '../types';
 import { money, minutesAgo, time, orderNo } from '../lib/format';
 import { buildCreamItem, OrderBuilder, type CreamPicks } from '../components/OrderBuilder';
+import { suggestPackaging } from '../lib/rules';
 import { TicketButton } from '../components/TicketButton';
 import { LocalPicker, PaymentModal, useWorkLocal } from '../components/shared';
 import { ConfirmButton, ItemLines, Timeline, useTick } from '../components/ui';
@@ -74,21 +75,11 @@ export function WaiterScreen() {
   );
 }
 
-/** Platos que llevan empaque: todo menos las categorías marcadas sin empaque (bebidas). */
-export function suggestPackaging(items: OrderItem[], db: ReturnType<typeof useDb>) {
-  return items.reduce((s, i) => {
-    if (i.productId.startsWith('extras:')) return s;
-    const p = db.products.find((x) => x.id === i.productId);
-    const c = db.categories.find((x) => x.id === p?.categoryId);
-    const pk = p?.packaging ?? c?.packaging;
-    return s + (pk === false ? 0 : i.qty);
-  }, 0);
-}
-
-export interface InitialOrder { cart: OrderItem[]; picks: CreamPicks; pkgQty: number | null; note: string }
+export interface InitialOrder { cart: OrderItem[]; picks: CreamPicks; pkgAmount: number | null; note: string }
+export interface Packaging { qty: number; amount: number }
 
 export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true, packaging, initial }: {
-  title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string, packagingQty: number) => void;
+  title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string, packaging: Packaging) => void;
   extra?: React.ReactNode; sendLabel?: string; canSend?: boolean; packaging?: boolean; initial?: InitialOrder;
 }) {
   const db = useDb();
@@ -97,11 +88,11 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
   const creamItem = buildCreamItem(db, cart, picks);
   const items = creamItem ? [...cart, creamItem] : cart;
   const [note, setNote] = useState(initial?.note ?? '');
-  const [pkgManual, setPkgManual] = useState<number | null>(initial?.pkgQty ?? null);
+  const [pkgManual, setPkgManual] = useState<number | null>(initial?.pkgAmount ?? null);
   const suggested = suggestPackaging(cart, db);
-  const pkgQty = packaging ? pkgManual ?? suggested : 0;
-  const pkgPrice = db.settings.packagingPrice ?? 0.5;
-  const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgQty * pkgPrice;
+  const pkgAmount = packaging ? pkgManual ?? suggested.amount : 0;
+  const pkg: Packaging = { qty: packaging ? suggested.qty : 0, amount: pkgAmount };
+  const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgAmount;
   return (
     <div className="page">
       <div className="section-head">
@@ -114,15 +105,14 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
         <div className="card packaging">
           <div className="grow">
             <b>Costo de empaques</b>
-            <div className="muted small">{money(pkgPrice)} por plato · sugerido: {suggested} {suggested === 1 ? 'plato' : 'platos'} (sin bebidas ni adicionales)</div>
+            <div className="muted small">{suggested.qty} {suggested.qty === 1 ? 'táper' : 'táperes'} según el precio de cada plato · sugerido {money(suggested.amount)}</div>
           </div>
           <div className="stepper small">
-            <button onClick={() => setPkgManual(Math.max(0, pkgQty - 1))} aria-label="Menos empaques">−</button>
-            <span>{pkgQty}</span>
-            <button onClick={() => setPkgManual(pkgQty + 1)} aria-label="Más empaques">+</button>
+            <button onClick={() => setPkgManual(Math.max(0, Math.round((pkgAmount - 0.5) * 100) / 100))} aria-label="Bajar S/ 0.50">−</button>
+            <b className="pkg-amount">{money(pkgAmount)}</b>
+            <button onClick={() => setPkgManual(Math.round((pkgAmount + 0.5) * 100) / 100)} aria-label="Subir S/ 0.50">+</button>
           </div>
-          <b className="pkg-amount">{money(pkgQty * pkgPrice)}</b>
-          {pkgManual !== null && pkgManual !== suggested && <button className="link small" onClick={() => setPkgManual(null)}>Usar sugerido ({suggested})</button>}
+          {pkgManual !== null && pkgManual !== suggested.amount && <button className="link small" onClick={() => setPkgManual(null)}>Usar sugerido ({money(suggested.amount)})</button>}
         </div>
       )}
       <label className="field">
@@ -131,7 +121,7 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
       </label>
       <div className="sticky-bar">
         <span className="grow">Cuenta: <b>{money(total)}</b> · {cart.reduce((s, i) => s + i.qty, 0)} ítems</span>
-        <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(items, note.trim(), pkgQty)}>{sendLabel}</button>
+        <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(items, note.trim(), pkg)}>{sendLabel}</button>
       </div>
     </div>
   );

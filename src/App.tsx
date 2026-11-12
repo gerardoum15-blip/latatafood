@@ -10,7 +10,9 @@ import { KitchenScreen } from './screens/Kitchen';
 import { DriverScreen } from './screens/Driver';
 import { CustomerApp } from './screens/Customer';
 import logo from './assets/logo.webp';
-import { CLOUD, staffLogin, useCloud } from './data/cloud';
+import { CLOUD, staffLogin, useCloud, useKitchenQueue } from './data/cloud';
+import { localAddress, waitMinutes } from './lib/rules';
+import { OrderTracker, useTracking } from './screens/OrderTracker';
 import { DeviceSetup, Loading } from './screens/Device';
 
 function useHash() {
@@ -127,23 +129,33 @@ function markStaffDevice(on: boolean) { try { if (on) localStorage.setItem(STAFF
 /** Portada pública: grande para clientes, acceso discreto para el personal. */
 function Landing() {
   const db = useDb();
+  const queue = useKitchenQueue();
+  const tracking = useTracking();
+  const [track, setTrack] = useState<string | null>(null);
   const wa = db.settings.whatsapp;
+  const waText = wa.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
   return (
     <div className="landing">
       <main className="landing-main">
         <img className="landing-logo" src={logo} alt={db.settings.businessName} width={640} height={453} />
-        <h1>¡Pide tu comida favorita!</h1>
-        <p className="landing-sub">Broster, alitas, salchipapas y hamburguesas preparadas al instante. Delivery en Santa Anita o recojo en local.</p>
+        <h1>Salvándote la cena</h1>
+        <p className="landing-sub">Broster, alitas, salchipapas y hamburguesas preparadas al instante. Delivery, recojo en local o para comer en mesa.</p>
         <a className="btn landing-cta" href="#carta">🍗 Ver la carta y pedir</a>
+        {tracking[0] && <button className="btn block" onClick={() => setTrack(tracking[0].id)}>📦 Ver estado de mi pedido</button>}
         <ul className="landing-facts">
-          <li><b>35 min</b><span>tiempo máximo de preparación</span></li>
-          <li><b>2 locales</b><span>{db.locales.map((l) => l.name.replace('Local ', '')).join(' · ')}</span></li>
-          {wa && <li><b>WhatsApp</b><span>{wa.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</span></li>}
+          <li><b>{waitMinutes(db, queue ?? 0)} min</b><span>tiempo de espera{queue !== null ? ` · ${queue} en cocina` : ''}</span></li>
+          <li><b>WhatsApp</b><span><a href={`https://wa.me/51${wa}`} target="_blank" rel="noreferrer">{waText}</a></span></li>
+        </ul>
+        <ul className="landing-locals" aria-label="Nuestros locales">
+          {db.locales.map((l) => (
+            <li key={l.id}><b>{l.name}</b><span>{localAddress(l)}</span></li>
+          ))}
         </ul>
       </main>
       <footer className="landing-staff">
         <a href="#personal">Personal de La Tata Food · Ingresar con código</a>
       </footer>
+      {track && <OrderTracker id={track} onClose={() => setTrack(null)} />}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createOrder, orderTotal, useDb, useSession } from '../data/store';
+import { addItems, createOrder, nextDriver, orderTotal, useDb, useSession } from '../data/store';
 import { PAY_LABEL, type Customer, type PayMethod } from '../types';
 import { money, orderNo } from '../lib/format';
 import { isUrl, waLink } from '../lib/whatsapp';
@@ -13,7 +13,7 @@ import { TicketButton } from '../components/TicketButton';
 import { parseOrderMessage, webOrderToParsed, type ParsedOrder } from '../lib/parseOrder';
 
 const EMPTY: Customer = { name: '', phone: '', address: '', reference: '', mapsUrl: '' };
-const METHODS: PayMethod[] = ['efectivo', 'yape', 'plin', 'tarjeta', 'transferencia', 'pagado'];
+const METHODS: PayMethod[] = ['efectivo', 'yape', 'plin', 'web', 'tarjeta', 'transferencia', 'pagado'];
 
 /** Mozo delivery: solo toma pedidos (cliente, contacto, ubicación, pago). */
 export function DeliveryScreen() {
@@ -42,12 +42,19 @@ export function DeliveryScreen() {
     prevPending.current = pending.length;
   }, [pending.length]);
 
+  const [dineIn, setDineIn] = useState<{ table: number | null } | null>(null);
+  const [pickup, setPickup] = useState(false);
+  const [payOk, setPayOk] = useState(false);
+
   const applyParsed = (r: ParsedOrder) => {
     setCustomer({ ...EMPTY, ...r.customer });
+    setDineIn(r.dineIn);
+    setPickup(r.pickup);
+    setPayOk(false);
     if (r.localId) setLocalId(r.localId);
     if (r.pay) setPay(r.pay);
     setCashWith(r.cashWith ? String(r.cashWith) : '');
-    setInitial({ cart: r.cart, picks: r.creamPicks, pkgQty: r.packagingQty, note: [r.pickup ? 'RECOJO EN LOCAL' : '', r.note].filter(Boolean).join(' · ') });
+    setInitial({ cart: r.cart, picks: r.creamPicks, pkgAmount: r.packaging, note: [r.pickup ? 'RECOJO EN LOCAL' : '', r.dineIn ? 'COMER EN MESA' : '', r.note].filter(Boolean).join(' · ') });
     setFormKey((k) => k + 1);
     setImportInfo({ count: r.cart.reduce((s, i) => s + i.qty, 0), warnings: r.warnings });
   };
@@ -66,7 +73,11 @@ export function DeliveryScreen() {
   };
 
   const local = db.locales.find((l) => l.id === localId);
-  const valid = !!(customer.name.trim() && customer.phone.trim() && (customer.address.trim() || isUrl(customer.mapsUrl)) && (!customer.mapsUrl.trim() || isUrl(customer.mapsUrl)));
+  const valid = dineIn
+    ? !!(customer.name.trim() && dineIn.table)
+    : !!(customer.name.trim() && customer.phone.trim() && (customer.address.trim() || isUrl(customer.mapsUrl)) && (!customer.mapsUrl.trim() || isUrl(customer.mapsUrl)));
+  const canSend = valid && (!activeReq || payOk);
+  const turnDriver = db.users.find((u) => u.id === nextDriver(db));
 
   if (sent) {
     return (
@@ -91,8 +102,8 @@ export function DeliveryScreen() {
       initial={initial}
       title="Nuevo pedido delivery"
       localId={localId}
-      canSend={valid}
-      sendLabel={valid ? 'Enviar a cocina' : 'Faltan datos del cliente'}
+      canSend={canSend}
+      sendLabel={!valid ? (dineIn ? 'Falta el número de mesa' : 'Faltan datos del cliente') : !canSend ? 'Valida el pago primero' : 'Enviar a cocina'}
       extra={
         <>
         {CLOUD && (
@@ -141,7 +152,28 @@ export function DeliveryScreen() {
             <textarea id="paste-order" rows={12} value={pasteText} onChange={(e) => setPasteText(e.target.value)} placeholder="*NUEVO PEDIDO · La Tata Food*&#10;Cliente: …" autoFocus />
           </Modal>
         )}
+        {activeReq && (
+          <div className="card pay-check">
+            <b>1. Validar el pago</b>
+            <p className="small muted">
+              {pay === 'efectivo'
+                ? `Efectivo${cashWith ? `: paga con S/ ${cashWith}. Prepara el vuelto.` : ': confirma con cuánto pagará.'}`
+                : `${PAY_LABEL[pay]}: revisa la captura del pago en el WhatsApp ${db.settings.whatsapp}.`}
+            </p>
+            <label className="check"><input id="pay-ok" type="checkbox" checked={payOk} onChange={(e) => setPayOk(e.target.checked)} /> {pay === 'efectivo' ? 'Monto y vuelto confirmados' : 'Pago verificado (captura recibida)'}</label>
+            {dineIn && <p className="small"><b>Comer en mesa</b> · no lleva empaque.</p>}
+          </div>
+        )}
         <div className="card form-grid">
+          {dineIn && (
+            <label className="field full"><span>Mesa N° *</span>
+              <select id="d-table" value={dineIn.table ?? ''} onChange={(e) => setDineIn({ table: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">Elegir mesa</option>
+                {Array.from({ length: local?.tables ?? 0 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>Mesa {n}</option>)}
+              </select>
+            </label>
+          )}
+          {!dineIn && !pickup && turnDriver && <p className="full small muted">Driver de turno: <b>{turnDriver.name}</b> (se asigna solo)</p>}
           <div className="full">
             <span className="muted small">Cocina que prepara el pedido</span>
             <LocalPicker value={localId} onChange={setLocalId} fixed={fixed} />
@@ -161,18 +193,25 @@ export function DeliveryScreen() {
         </div>
         </>
       }
-      packaging
-      onSend={(items, note, packagingQty) => {
+      packaging={!dineIn}
+      onSend={(items, note, pkg) => {
         const c = { ...customer, name: customer.name.trim(), phone: customer.phone.trim(), address: customer.address.trim(), mapsUrl: customer.mapsUrl.trim() };
-        const input = {
-          localId, channel: 'delivery' as const, table: null, customer: c, deliveryFee: 0,
-          packagingQty, packagingPrice: db.settings.packagingPrice ?? 0.5,
-          plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note,
-        };
-        const id = createOrder(input, user);
+        let id: string;
+        if (dineIn && dineIn.table) {
+          // Comer en mesa: va a la mesa del local (si ya tiene pedido abierto, se agrega).
+          const open = db.orders.find((o) => o.localId === localId && o.channel === 'salon' && !o.closed && o.table === dineIn.table);
+          if (open) { addItems(open.id, items, user); id = open.id; }
+          else id = createOrder({ localId, channel: 'salon', table: dineIn.table, customer: c.phone ? c : null, deliveryFee: 0, plannedPay: pay, cashWith: null, driverId: null, items, note: [`Pedido web de ${c.name}`, note].filter(Boolean).join(' · ') }, user);
+        } else {
+          id = createOrder({
+            localId, channel: 'delivery', table: null, customer: c, deliveryFee: 0,
+            packagingQty: pkg.qty, packagingAmount: pkg.amount,
+            plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note, pickup,
+          }, user);
+        }
         if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
-        setSent({ id, name: c.name, phone: c.phone, total: orderTotal({ items, deliveryFee: 0, packagingQty, packagingPrice: db.settings.packagingPrice ?? 0.5 }) });
-        setCustomer(EMPTY); setCashWith(''); setPay('efectivo');
+        setSent({ id, name: c.name, phone: c.phone, total: orderTotal({ items, deliveryFee: 0, packagingAmount: dineIn ? 0 : pkg.amount }) });
+        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false);
       }}
     />
   );

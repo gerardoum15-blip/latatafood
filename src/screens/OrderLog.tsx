@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { assignDriver, cancelOrder, orderTotal, packagingTotal, useDb, useSession } from '../data/store';
+import { assignDriver, cancelOrder, deleteOrder, orderTotal, packagingTotal, useDb, useSession } from '../data/store';
 import { PAY_LABEL, type Order } from '../types';
 import { dayKey, money, time, orderNo } from '../lib/format';
 import { orderStage, stageHint, STAGE_LABEL, STAGES, type Stage } from '../lib/status';
@@ -81,7 +81,7 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
       <div className="row between">
         <span className="muted small">
           {order.channel === 'delivery' && order.plannedPay ? PAY_LABEL[order.plannedPay] : order.payments.map((p) => PAY_LABEL[p.method]).join(' + ')}
-          {pkg > 0 && ` · empaques ${order.packagingQty} (${money(pkg)})`}
+          {pkg > 0 && ` · empaques ${money(pkg)}`}
         </span>
         <span className="row gap"><TicketButton order={order} /><b>{money(orderTotal(order))}</b></span>
       </div>
@@ -94,6 +94,11 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
             </select>
           )}
           <ConfirmButton className="btn small ghost danger" label="Anular" title={`Anular pedido ${orderNo(order)}`} message="El pedido no contará en las ventas." reason confirmLabel="Anular pedido" onConfirm={(r) => cancelOrder(order.id, r, me)} />
+        </div>
+      )}
+      {admin && (
+        <div className="row gap wrap">
+          <ConfirmButton className="btn small ghost danger" label="🗑 Borrar pedido" title={`Borrar pedido ${orderNo(order)}`} message="Se borrará por completo: no contará en ventas ni aparecerá en el registro. No se puede deshacer." confirmLabel="Borrar definitivamente" onConfirm={() => deleteOrder(order.id)} />
         </div>
       )}
       <details>

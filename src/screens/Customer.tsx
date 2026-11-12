@@ -4,10 +4,11 @@ import { PAY_LABEL, type OrderItem, type PayMethod, type Product } from '../type
 import { availableToday, daysLabel, money } from '../lib/format';
 import { waLink } from '../lib/whatsapp';
 import { LocationPicker, mapsUrlFor, type PickedLocation } from '../components/LocationPicker';
-import { CLOUD, submitOrderRequest, type WebOrder } from '../data/cloud';
+import { CLOUD, submitOrderRequest, useKitchenQueue, type WebOrder } from '../data/cloud';
+import { OrderTracker, rememberTracking, useTracking } from './OrderTracker';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
-import { suggestPackaging } from './Waiter';
+import { localAddress, payInfo, suggestPackaging, waitMinutes } from '../lib/rules';
 import logo from '../assets/logo.webp';
 
 const KEY = 'pos-restaurante-cliente';
@@ -57,12 +58,16 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const [picks, setPicks] = useState<CreamPicks>({});
   const [editing, setEditing] = useState<Product | null>(null);
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'delivery' | 'recojo'>('delivery');
+  const [mode, setMode] = useState<'delivery' | 'recojo' | 'mesa'>('delivery');
+  const [table, setTable] = useState('');
+  const queue = useKitchenQueue();
+  const tracking = useTracking();
+  const [showTrack, setShowTrack] = useState<string | null>(null);
   const [localId, setLocalId] = useState(db.locales[0]?.id ?? '');
   const [address, setAddress] = useState('');
   const [loc, setLoc] = useState<PickedLocation | null>(null);
   const maps = loc ? mapsUrlFor(loc) : '';
-  const [sent, setSent] = useState<'ok' | 'wa-only' | null>(null);
+  const [sendErr, setSendErr] = useState('');
   const [pay, setPay] = useState<PayMethod>('efectivo');
   const [cash, setCash] = useState('');
   const [note, setNote] = useState('');
@@ -79,11 +84,13 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const creamItem = buildCreamItem(db, cart, picks);
   const items = creamItem ? [...cart, creamItem] : cart;
   const count = cart.reduce((s, i) => s + i.qty, 0);
-  const pkgPrice = db.settings.packagingPrice ?? 0.5;
-  const pkgQty = mode === 'delivery' ? suggestPackaging(cart, db) : 0;
-  const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgQty * pkgPrice;
+  const pkg = mode === 'mesa' ? { qty: 0, amount: 0 } : suggestPackaging(cart, db);
+  const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkg.amount;
   const local = db.locales.find((l) => l.id === localId);
-  const ready = count > 0 && (mode === 'recojo' || !!address.trim());
+  const pi = payInfo(db);
+  const tableNo = Number(table);
+  const ready = count > 0 && (mode === 'recojo' || (mode === 'mesa' ? tableNo >= 1 : !!address.trim()));
+  const wait = waitMinutes(db, queue ?? 0);
 
   const message = useMemo(() => {
     const L: string[] = [];
@@ -94,6 +101,8 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
       L.push('Entrega: Delivery');
       if (address.trim()) L.push(`Dirección: ${address.trim()}`);
       if (maps) L.push(`Ubicación: ${maps}`);
+    } else if (mode === 'mesa') {
+      L.push(`Entrega: Comer en mesa ${tableNo || '?'} · ${local?.name ?? 'local'}`);
     } else {
       L.push(`Entrega: Recojo en ${local?.name ?? 'local'}`);
     }
@@ -103,13 +112,14 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
       for (const m of it.modifiers) L.push(`   · ${m.groupName}: ${m.qty > 1 ? `${m.qty}× ` : ''}${m.optionName}`);
       if (it.note) L.push(`   Nota: ${it.note}`);
     }
-    if (pkgQty) L.push(`Empaques: ${pkgQty} × ${money(pkgPrice)} = ${money(pkgQty * pkgPrice)}`);
+    if (pkg.amount) L.push(`Empaques: ${pkg.qty} ${pkg.qty === 1 ? 'táper' : 'táperes'} = ${money(pkg.amount)}`);
     L.push('');
     L.push(`*Total: ${money(total)}*${mode === 'delivery' ? ' + delivery según distancia' : ''}`);
     L.push(`Pago: ${PAY_LABEL[pay]}${pay === 'efectivo' && cash ? `, paga con ${money(Number(cash))}` : ''}`);
+    if (pay === 'yape' || pay === 'plin' || pay === 'web') L.push('Envío la captura del pago por este chat.');
     if (note.trim()) L.push(`Comentario: ${note.trim()}`);
     return L.join('\n');
-  }, [db.settings.businessName, client, mode, address, maps, local, items, pkgQty, pkgPrice, total, pay, cash, note]);
+  }, [db.settings.businessName, client, mode, tableNo, address, maps, local, items, pkg, total, pay, cash, note]);
 
   return (
     <div className="customer">
@@ -117,10 +127,11 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
         <Brand />
         <p>Hola, <b>{client.name.split(' ')[0]}</b> 👋 · <button className="c-link" onClick={onChangeClient}>Cambiar mis datos</button></p>
         <ul className="c-notes">
-          <li>Tiempo de preparación: 35 minutos máximo.</li>
+          <li>Tiempo de espera aproximado: <b>{wait} min</b>{queue !== null ? ` (${queue} ${queue === 1 ? 'pedido' : 'pedidos'} en cocina)` : ''}.</li>
           <li>Todos los platos son preparados al instante.</li>
-          <li>El delivery se cobra según la distancia. El empaque se cobra aparte.</li>
+          <li>El delivery se cobra según la distancia. El empaque se cobra aparte (no en mesa).</li>
         </ul>
+        {tracking[0] && <button className="btn small c-track-btn" onClick={() => setShowTrack(tracking[0].id)}>📦 Ver estado de mi pedido</button>}
       </header>
       <nav className="c-cats" aria-label="Categorías">
         {cats.filter((c) => db.products.some((p) => p.active && p.categoryId === c.id)).map((c) => (
@@ -159,10 +170,10 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
         })}
       </main>
 
-      {sent && (
-        <Modal title="¡Pedido enviado!" onClose={() => setSent(null)} footer={<button className="btn primary block" onClick={() => setSent(null)}>Volver a la carta</button>}>
-          <p>Gracias, {client.name.split(' ')[0]}. Recibimos tu pedido y lo estamos revisando.</p>
-          <p className="muted">Te confirmaremos por WhatsApp. Si no se abrió WhatsApp, escríbenos al {db.settings.whatsapp}.</p>
+      {showTrack && <OrderTracker id={showTrack} onClose={() => setShowTrack(null)} />}
+      {sendErr && (
+        <Modal title="Pedido enviado por WhatsApp" onClose={() => setSendErr('')} footer={<button className="btn primary block" onClick={() => setSendErr('')}>Entendido</button>}>
+          <p>Tu pedido se envió por WhatsApp. No pudimos registrarlo en el sistema ({sendErr}), pero lo atenderemos desde el chat.</p>
         </Modal>
       )}
 
@@ -180,22 +191,25 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
         <Modal title="Mi pedido" onClose={() => setOpen(false)} footer={
           <div className="driver-actions">
             <div className="total-row"><span>Total{mode === 'delivery' ? ' (+ delivery según distancia)' : ''}</span><b>{money(total)}</b></div>
+            <p className="muted small">Al enviar, se abre WhatsApp con tu pedido. Confirmamos cuando validemos el pago.</p>
             {ready ? (
               <a className="btn wa big-ok block" href={waLink(db.settings.whatsapp, message)} target="_blank" rel="noreferrer" onClick={() => {
                 // Registrar el pedido para que el mozo delivery lo valide (y además se abre WhatsApp con el resumen).
                 const data: WebOrder = {
                   v: 1,
-                  customer: { name: client.name, phone: client.phone, address: mode === 'delivery' ? address.trim() : `Recojo en ${local?.name ?? 'local'}`, mapsUrl: mode === 'delivery' ? maps : '', lat: mode === 'delivery' ? loc?.lat ?? null : null, lng: mode === 'delivery' ? loc?.lng ?? null : null },
-                  mode, localId: mode === 'recojo' ? localId : null, pay, cashWith: pay === 'efectivo' && cash ? Number(cash) : null, note: note.trim(),
-                  items: cart, creamPicks: picks, packagingQty: pkgQty, total,
+                  customer: { name: client.name, phone: client.phone, address: mode === 'delivery' ? address.trim() : mode === 'mesa' ? `Mesa ${tableNo} · ${local?.name ?? ''}` : `Recojo en ${local?.name ?? 'local'}`, mapsUrl: mode === 'delivery' ? maps : '', lat: mode === 'delivery' ? loc?.lat ?? null : null, lng: mode === 'delivery' ? loc?.lng ?? null : null },
+                  mode, table: mode === 'mesa' ? tableNo : null, localId: mode === 'delivery' ? null : localId, pay, cashWith: pay === 'efectivo' && cash ? Number(cash) : null, note: note.trim(),
+                  items: cart, creamPicks: picks, packagingQty: pkg.qty, packagingAmount: pkg.amount, total,
                 };
-                const ok = CLOUD;
-                if (ok) void submitOrderRequest(data);
-                setSent(ok ? 'ok' : 'wa-only');
+                if (CLOUD) {
+                  void submitOrderRequest(data).then((r) => {
+                    if (r.id) { rememberTracking(r.id); setShowTrack(r.id); } else setSendErr(r.error ?? 'sin conexión');
+                  });
+                }
                 setOpen(false); setCart([]); setPicks({}); setNote('');
               }}>💬 Enviar pedido</a>
             ) : (
-              <button className="btn block" disabled>{count === 0 ? 'Agrega platos' : 'Marca tu ubicación o escribe tu dirección'}</button>
+              <button className="btn block" disabled>{count === 0 ? 'Agrega platos' : mode === 'mesa' ? 'Escribe el número de tu mesa' : 'Marca tu ubicación o escribe tu dirección'}</button>
             )}
           </div>
         }>
@@ -221,28 +235,47 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
             <div className="local-picker">
               <button className={mode === 'delivery' ? 'seg active' : 'seg'} onClick={() => setMode('delivery')}>🛵 Delivery</button>
               <button className={mode === 'recojo' ? 'seg active' : 'seg'} onClick={() => setMode('recojo')}>🏪 Recojo en local</button>
+              <button className={mode === 'mesa' ? 'seg active' : 'seg'} onClick={() => setMode('mesa')}>🍽 Comer en mesa</button>
             </div>
             {mode === 'delivery' ? (
               <>
                 <LocationPicker value={loc} onChange={setLoc} onAddress={setAddress} />
                 <label className="field"><span>Dirección de envío</span><input id="c-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, referencia" /><span className="muted small">Revisa y agrega referencias (piso, color de puerta…).</span></label>
-                {pkgQty > 0 && <p className="muted small">Empaques: {pkgQty} × {money(pkgPrice)} = {money(pkgQty * pkgPrice)}</p>}
+                {pkg.amount > 0 && <p className="muted small">Empaques: {pkg.qty} {pkg.qty === 1 ? 'táper' : 'táperes'} = {money(pkg.amount)}</p>}
               </>
             ) : (
-              <div className="local-picker">
-                {db.locales.map((l) => (
-                  <button key={l.id} className={localId === l.id ? 'seg active' : 'seg'} onClick={() => setLocalId(l.id)}>{l.name}</button>
-                ))}
-              </div>
+              <>
+                <span className="muted small">{mode === 'mesa' ? '¿En qué local estás?' : '¿En qué local recoges?'}</span>
+                <div className="local-picker">
+                  {db.locales.map((l) => (
+                    <button key={l.id} className={localId === l.id ? 'seg active' : 'seg'} onClick={() => setLocalId(l.id)}>{l.name}</button>
+                  ))}
+                </div>
+                {local && <p className="muted small">{localAddress(local)}</p>}
+                {mode === 'mesa' && (
+                  <label className="field"><span>Número de tu mesa</span><input id="c-table" type="number" inputMode="numeric" min={1} max={local?.tables ?? 99} value={table} onChange={(e) => setTable(e.target.value)} placeholder="Ej. 4" /><span className="muted small">En mesa no se cobra empaque.</span></label>
+                )}
+                {mode === 'recojo' && pkg.amount > 0 && <p className="muted small">Empaques: {pkg.qty} {pkg.qty === 1 ? 'táper' : 'táperes'} = {money(pkg.amount)}</p>}
+              </>
             )}
           </fieldset>
 
           <fieldset className="mod-group">
             <legend>Pago</legend>
-            <select id="c-pay" aria-label="Forma de pago" value={pay} onChange={(e) => setPay(e.target.value as PayMethod)}>
-              {(['efectivo', 'yape', 'plin', 'tarjeta'] as PayMethod[]).map((m) => <option key={m} value={m}>{PAY_LABEL[m]}</option>)}
-            </select>
-            {pay === 'efectivo' && <label className="field"><span>¿Con cuánto pagas? (para tu vuelto)</span><input id="c-cash" type="number" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} /></label>}
+            <div className="pay-options" role="radiogroup" aria-label="Forma de pago">
+              {(['yape', 'plin', 'web', 'tarjeta', 'efectivo'] as PayMethod[]).map((m) => (
+                <button key={m} role="radio" aria-checked={pay === m} className={pay === m ? 'seg active' : 'seg'} onClick={() => setPay(m)}>{PAY_LABEL[m]}</button>
+              ))}
+            </div>
+            <div className="pay-help small">
+              {pay === 'yape' && <p>Yapea <b>{money(total)}</b> al <b>{pi.yape}</b> y envía la captura al WhatsApp <b>{db.settings.whatsapp}</b>.</p>}
+              {pay === 'plin' && <p>Plinea <b>{money(total)}</b> al <b>{pi.plin}</b> y envía la captura al WhatsApp <b>{db.settings.whatsapp}</b>.</p>}
+              {pay === 'web' && (pi.webUrl
+                ? <p>Paga en línea en <a href={pi.webUrl} target="_blank" rel="noreferrer">este enlace</a> y envía la captura al WhatsApp <b>{db.settings.whatsapp}</b>.</p>
+                : <p>Te enviaremos el enlace de pago por WhatsApp. Luego envía la captura al <b>{db.settings.whatsapp}</b>.</p>)}
+              {pay === 'tarjeta' && <p>{mode === 'delivery' ? 'El motorizado llevará el POS para pagar con tarjeta.' : 'Pagas con tarjeta (POS) en el local.'}</p>}
+              {pay === 'efectivo' && <label className="field"><span>¿Con cuánto pagas? (para tu vuelto)</span><input id="c-cash" type="number" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} /></label>}
+            </div>
           </fieldset>
           <label className="field"><span>Comentario para el pedido</span><input id="c-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opcional" /></label>
         </Modal>

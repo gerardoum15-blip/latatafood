@@ -432,7 +432,7 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .landing h1::after { content: ""; display: block; width: 64px; height: 4px; background: var(--brand); margin: 12px auto 0; border-radius: 2px; }
 .landing-sub { margin: 0; color: var(--muted); max-width: 40ch; }
 .landing-cta { width: 100%; min-height: 64px; font-size: 1.2rem; background: var(--brand); color: #ffffff; border-color: var(--brand); border-radius: 16px; box-shadow: 0 6px 18px rgb(125 20 36 / 0.25); }
-.landing-facts { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
+.landing-facts { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
 .landing-facts li { min-width: 0; overflow-wrap: anywhere; }
 .landing-facts li { border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
 .landing-facts b { color: var(--brand); }
@@ -441,3 +441,28 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .landing-staff a { color: var(--faint, #9a9494); font-size: 0.8rem; text-decoration: none; }
 .landing-staff a:hover, .landing-staff a:focus-visible { text-decoration: underline; color: var(--muted); }
 .staff-tag { margin: 0; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand); font-weight: 700; }
+
+/* Pagos y seguimiento del cliente */
+.pay-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.pay-help p { margin: 6px 0 0; }
+.c-track-btn { background: var(--brand); color: #ffffff; border-color: var(--brand); }
+.track-pending, .track-rejected { border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.track-pending { background: var(--warn-soft); }
+.track-rejected { background: var(--danger-soft); }
+.track-pending p, .track-rejected p { margin: 0; }
+.track-steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.track-steps li { display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative; color: var(--muted); }
+.track-steps li:not(:last-child)::after { content: ""; position: absolute; left: 15px; top: 40px; bottom: -10px; width: 2px; background: var(--border); }
+.track-steps li.done:not(:last-child)::after { background: var(--ok); }
+.track-steps .dot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--surface-2); flex: none; z-index: 1; }
+.track-steps li.done { color: var(--text); }
+.track-steps li.done .dot { background: var(--ok); color: #ffffff; }
+.track-steps li.now { color: var(--text); font-weight: 800; }
+.track-steps li.now .dot { background: var(--brand); color: #ffffff; box-shadow: 0 0 0 5px var(--brand-soft); }
+.pay-check { border-left: 5px solid var(--warn); background: var(--warn-soft); display: flex; flex-direction: column; gap: 4px; }
+.pay-check p { margin: 0; }
+.landing-facts a { color: inherit; }
+.landing-locals { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.landing-locals li { display: flex; flex-direction: column; padding: 10px 12px; border-left: 4px solid var(--brand); background: var(--surface-2); border-radius: 0 10px 10px 0; }
+.landing-locals span { color: var(--muted); font-size: 0.86rem; }
+.local-edit { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }

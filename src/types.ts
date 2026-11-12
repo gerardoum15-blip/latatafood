@@ -12,6 +12,8 @@ export interface Local {
   id: string;
   name: string;
   tables: number;
+  /** Dirección que ven los clientes (ej. "Andahuaylas, Santa Anita"). */
+  address?: string;
 }
 
 export interface User {
@@ -125,13 +127,14 @@ export const DELIVERY_LABEL: Record<DeliveryStatus, string> = {
   entregado: 'Entregado',
 };
 
-export type PayMethod = 'efectivo' | 'yape' | 'plin' | 'tarjeta' | 'transferencia' | 'pagado';
+export type PayMethod = 'efectivo' | 'yape' | 'plin' | 'web' | 'tarjeta' | 'transferencia' | 'pagado';
 
 export const PAY_LABEL: Record<PayMethod, string> = {
   efectivo: 'Efectivo',
   yape: 'Yape',
   plin: 'Plin',
-  tarjeta: 'Tarjeta',
+  web: 'Pago web (enlace)',
+  tarjeta: 'POS con tarjeta',
   transferencia: 'Transferencia',
   pagado: 'Ya pagado (adelantado)',
 };
@@ -169,6 +172,8 @@ export interface Order {
   /** Cantidad de empaques cobrados y precio de cada uno. */
   packagingQty?: number;
   packagingPrice?: number;
+  /** Monto total de empaques (si existe, reemplaza a cantidad × precio). */
+  packagingAmount?: number;
   /** Delivery: forma de pago acordada con el cliente. */
   plannedPay: PayMethod | null;
   cashWith: number | null;
@@ -207,6 +212,13 @@ export interface Settings {
   businessName: string;
   whatsapp: string;
   packagingPrice: number;
+  /** Empaque por plato según su precio (desde S/ min), con tope por plato. */
+  packagingTiers?: { min: number; price: number }[];
+  packagingMax?: number;
+  /** Tiempo de espera según pedidos en cocina (desde N pedidos → minutos). */
+  waitTiers?: { min: number; minutes: number }[];
+  /** Datos de pago que ve el cliente. */
+  payInfo?: { yape: string; plin: string; webUrl: string };
   msgEnCamino: string;
   msgLlegue: string;
 }
