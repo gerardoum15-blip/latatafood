@@ -31,6 +31,14 @@ function priceMods(group: ModifierGroup, picks: Record<string, number>, free: nu
 }
 
 export type CreamPicks = Record<string, Record<string, number>>;
+
+/** Arma un plato con sus opciones elegidas (por id de grupo → id de opción → cantidad). */
+export function buildItem(db: DB, product: Product, localId: string, picks: CreamPicks, qty: number, note: string): OrderItem {
+  const base = productPrice(product, localId);
+  const groups = product.groupIds.map((id) => db.groups.find((g) => g.id === id)).filter((g): g is ModifierGroup => !!g && !g.orderLevel);
+  const mods = groups.flatMap((g) => priceMods(g, picks[g.id] ?? {}, freeFor(g, base)));
+  return { id: uid('i'), productId: product.id, name: product.name, basePrice: base, unitPrice: base + mods.reduce((s, m) => s + m.price, 0), qty, modifiers: mods, note, round: 1 };
+}
 export const CREAM_ITEM_ID = 'extras:cremas';
 
 const hasItemGroups = (db: DB, p: Product) => p.groupIds.some((id) => { const g = db.groups.find((x) => x.id === id); return g && !g.orderLevel; });

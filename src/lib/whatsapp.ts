@@ -6,10 +6,16 @@ export function normalizePhone(raw: string): string {
   return d;
 }
 
+/** WhatsApp daña los emojis "grandes" (fuera del plano básico) al abrir un chat desde un enlace: se quitan. */
+export const safeWaText = (t: string) => t.replace(/ ?[\u{10000}-\u{10FFFF}]\uFE0F?/gu, '');
+
 export function waLink(phone: string, text?: string) {
   const base = `https://wa.me/${normalizePhone(phone)}`;
-  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
+  return text ? `${base}?text=${encodeURIComponent(safeWaText(text))}` : base;
 }
+
+/** Acepta solo enlaces web (evita pegar cualquier texto como ubicación). */
+export const isUrl = (s: string) => /^https?:\/\/\S+$/i.test(s.trim());
 
 export function fillTemplate(tpl: string, vars: Record<string, string>) {
   return tpl.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? vars[k] : m));

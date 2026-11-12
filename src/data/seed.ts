@@ -130,8 +130,8 @@ export function createSeed(): DB {
       businessName: 'La Tata Food',
       whatsapp: '955093657',
       packagingPrice: 0.5,
-      msgEnCamino: 'Hola {cliente}, soy {driver} de {negocio} 🛵. Ya tengo tu pedido, estoy en camino a tu dirección.',
-      msgLlegue: 'Hola {cliente}, ya llegué a tu ubicación 📍. No demores en recoger tu pedido, por favor. Total: {total} ({pago}).',
+      msgEnCamino: 'Hola {cliente}, soy {driver} de {negocio}. Ya tengo tu pedido, estoy en camino a tu dirección.',
+      msgLlegue: 'Hola {cliente}, ya llegué a tu ubicación. No demores en recoger tu pedido, por favor. Total: {total} ({pago}).',
     },
     locales: [
       { id: 'l-andahuaylas', name: 'Local Andahuaylas', tables: 12 },

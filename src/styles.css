@@ -398,3 +398,8 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .sync-badge { align-self: center; font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #3a3535; color: #ffffff; white-space: nowrap; }
 .sync-badge.off { background: var(--danger); }
 .login-box h2 { margin: 0; }
+.paste-btn { background: var(--ink); color: #ffffff; border-color: var(--ink); min-height: 52px; }
+.import-info { border-left: 5px solid var(--ok); background: var(--ok-soft); display: flex; flex-direction: column; gap: 6px; }
+.import-info.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.import-info ul { margin: 0; padding-left: 18px; font-size: 0.9rem; }
+textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }

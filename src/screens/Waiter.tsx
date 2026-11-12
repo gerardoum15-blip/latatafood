@@ -84,17 +84,19 @@ export function suggestPackaging(items: OrderItem[], db: ReturnType<typeof useDb
   }, 0);
 }
 
-export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true, packaging }: {
+export interface InitialOrder { cart: OrderItem[]; picks: CreamPicks; pkgQty: number | null; note: string }
+
+export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true, packaging, initial }: {
   title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string, packagingQty: number) => void;
-  extra?: React.ReactNode; sendLabel?: string; canSend?: boolean; packaging?: boolean;
+  extra?: React.ReactNode; sendLabel?: string; canSend?: boolean; packaging?: boolean; initial?: InitialOrder;
 }) {
   const db = useDb();
-  const [cart, setCart] = useState<OrderItem[]>([]);
-  const [picks, setPicks] = useState<CreamPicks>({});
+  const [cart, setCart] = useState<OrderItem[]>(initial?.cart ?? []);
+  const [picks, setPicks] = useState<CreamPicks>(initial?.picks ?? {});
   const creamItem = buildCreamItem(db, cart, picks);
   const items = creamItem ? [...cart, creamItem] : cart;
-  const [note, setNote] = useState('');
-  const [pkgManual, setPkgManual] = useState<number | null>(null);
+  const [note, setNote] = useState(initial?.note ?? '');
+  const [pkgManual, setPkgManual] = useState<number | null>(initial?.pkgQty ?? null);
   const suggested = suggestPackaging(cart, db);
   const pkgQty = packaging ? pkgManual ?? suggested : 0;
   const pkgPrice = db.settings.packagingPrice ?? 0.5;

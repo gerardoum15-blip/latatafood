@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { uid, useDb } from '../data/store';
 import { PAY_LABEL, type OrderItem, type PayMethod, type Product } from '../types';
 import { availableToday, daysLabel, money } from '../lib/format';
-import { waLink } from '../lib/whatsapp';
+import { isUrl, waLink } from '../lib/whatsapp';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
 import { suggestPackaging } from './Waiter';
@@ -79,29 +79,31 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const pkgQty = mode === 'delivery' ? suggestPackaging(cart, db) : 0;
   const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgQty * pkgPrice;
   const local = db.locales.find((l) => l.id === localId);
-  const ready = count > 0 && (mode === 'recojo' || address.trim() || maps.trim());
+  const ready = count > 0 && (mode === 'recojo' || address.trim() || isUrl(maps));
 
   const message = useMemo(() => {
     const L: string[] = [];
-    L.push(`*Nuevo pedido · ${db.settings.businessName}*`);
-    L.push(`👤 ${client.name} · ${client.phone}`);
+    L.push(`*NUEVO PEDIDO · ${db.settings.businessName}*`);
+    L.push(`Cliente: ${client.name}`);
+    L.push(`WhatsApp: ${client.phone}`);
     if (mode === 'delivery') {
-      L.push(`🛵 Delivery${address.trim() ? `: ${address.trim()}` : ''}`);
-      if (maps.trim()) L.push(`📍 ${maps.trim()}`);
+      L.push('Entrega: Delivery');
+      if (address.trim()) L.push(`Dirección: ${address.trim()}`);
+      if (isUrl(maps)) L.push(`Ubicación: ${maps.trim()}`);
     } else {
-      L.push(`🏪 Recojo en ${local?.name ?? 'local'}`);
+      L.push(`Entrega: Recojo en ${local?.name ?? 'local'}`);
     }
     L.push('');
     for (const it of items) {
       L.push(`${it.qty}× ${it.name} — ${money(it.unitPrice * it.qty)}`);
       for (const m of it.modifiers) L.push(`   · ${m.groupName}: ${m.qty > 1 ? `${m.qty}× ` : ''}${m.optionName}`);
-      if (it.note) L.push(`   📝 ${it.note}`);
+      if (it.note) L.push(`   Nota: ${it.note}`);
     }
     if (pkgQty) L.push(`Empaques: ${pkgQty} × ${money(pkgPrice)} = ${money(pkgQty * pkgPrice)}`);
     L.push('');
     L.push(`*Total: ${money(total)}*${mode === 'delivery' ? ' + delivery según distancia' : ''}`);
-    L.push(`💵 Pago: ${PAY_LABEL[pay]}${pay === 'efectivo' && cash ? `, pago con ${money(Number(cash))}` : ''}`);
-    if (note.trim()) L.push(`📝 ${note.trim()}`);
+    L.push(`Pago: ${PAY_LABEL[pay]}${pay === 'efectivo' && cash ? `, paga con ${money(Number(cash))}` : ''}`);
+    if (note.trim()) L.push(`Comentario: ${note.trim()}`);
     return L.join('\n');
   }, [db.settings.businessName, client, mode, address, maps, local, items, pkgQty, pkgPrice, total, pay, cash, note]);
 
@@ -200,7 +202,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
             {mode === 'delivery' ? (
               <>
                 <label className="field"><span>Dirección</span><input id="c-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, referencia" /></label>
-                <label className="field"><span>Ubicación de Google Maps (opcional)</span><input id="c-maps" type="url" value={maps} onChange={(e) => setMaps(e.target.value)} placeholder="Pega el enlace de tu ubicación" /></label>
+                <label className="field"><span>Ubicación de Google Maps (opcional)</span><input id="c-maps" type="url" value={maps} onChange={(e) => setMaps(e.target.value)} placeholder="https://maps.app.goo.gl/…" />{maps.trim() && !isUrl(maps) && <span className="err-text small">Pega un enlace que empiece con https:// (en Google Maps: Compartir → Copiar enlace).</span>}</label>
                 {pkgQty > 0 && <p className="muted small">Empaques: {pkgQty} × {money(pkgPrice)} = {money(pkgQty * pkgPrice)}</p>}
               </>
             ) : (
