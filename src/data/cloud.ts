@@ -20,9 +20,13 @@ const HISTORY_DAYS = 400;
 
 // ---------- Estado de la conexión ----------
 
-export type CloudStatus = 'checking' | 'signed-out' | 'loading' | 'ready' | 'error';
-interface CloudState { status: CloudStatus; catalogReady: boolean; online: boolean; pending: number; error: string }
-let state: CloudState = { status: CLOUD ? 'checking' : 'ready', catalogReady: !CLOUD, online: true, pending: 0, error: '' };
+/**
+ * checking: iniciando · signed-out: falta la clave del local (modo antiguo) · need-pin: falta ingresar un PIN
+ * loading: cargando datos · ready: listo · error: no se pudo cargar
+ */
+export type CloudStatus = 'checking' | 'signed-out' | 'need-pin' | 'loading' | 'ready' | 'error';
+interface CloudState { status: CloudStatus; catalogReady: boolean; online: boolean; pending: number; error: string; pinServer: boolean }
+let state: CloudState = { status: CLOUD ? 'checking' : 'ready', catalogReady: !CLOUD, online: true, pending: 0, error: '', pinServer: false };
 const stateListeners = new Set<() => void>();
 function setState(patch: Partial<CloudState>) {
   state = { ...state, ...patch };
@@ -37,13 +41,15 @@ export function useCloud(): CloudState {
 export interface StoreApi {
   getDb: () => DB;
   replaceDb: (next: DB) => void;
+  setUser: (id: string | null) => void;
 }
 let api: StoreApi | null = null;
 
 type Catalog = Pick<DB, 'settings' | 'locales' | 'categories' | 'groups' | 'products'>;
 type Staff = Pick<DB, 'users'>;
 const catalogOf = (d: DB): Catalog => ({ settings: d.settings, locales: d.locales, categories: d.categories, groups: d.groups, products: d.products });
-const staffOf = (d: DB): Staff => ({ users: d.users });
+/** Con el ingreso por PIN, los PIN viven cifrados en el servidor y nunca se guardan en la lista visible. */
+const staffOf = (d: DB): Staff => ({ users: state.pinServer ? d.users.map(({ pin: _pin, ...u }) => ({ ...u, pin: '' })) : d.users });
 
 /** Última versión confirmada por el servidor de cada pedido (para unir cambios simultáneos). */
 const versions = new Map<string, number>();
@@ -61,14 +67,73 @@ export async function startCloud(storeApi: StoreApi) {
   api = storeApi;
   if (!supabase) return;
   loadCatalog();
-  const { data } = await supabase.auth.getSession();
-  if (data.session) await loadAll();
-  else setState({ status: 'signed-out' });
   supabase.auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_OUT') { channel?.unsubscribe(); channel = null; setState({ status: 'signed-out' }); }
+    if (event === 'SIGNED_OUT') { channel?.unsubscribe(); channel = null; void resolveAccess(); }
   });
+  await resolveAccess();
   window.addEventListener('online', () => { setState({ online: true }); kick(); });
   window.addEventListener('offline', () => setState({ online: false }));
+}
+
+const isEmailStaff = async () => (await supabase!.auth.getSession()).data.session?.user.email === STAFF_EMAIL;
+
+/**
+ * Decide qué necesita este celular: si ya ingresó con PIN, carga todo; si no, pide el PIN.
+ * Cada celular usa una sesión anónima de Supabase; el PIN la convierte en sesión del personal.
+ */
+async function resolveAccess() {
+  if (!supabase || !api) return;
+  setState({ status: 'checking', error: '' });
+  let { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    const r = await supabase.auth.signInAnonymously();
+    if (r.error) { setState({ status: 'signed-out', pinServer: false }); return; } // ingreso anónimo desactivado
+    session = r.data.session;
+  }
+  const r = await supabase.rpc('my_staff_user');
+  const email = session?.user.email === STAFF_EMAIL;
+  if (r.error) {
+    if (r.error.code === 'PGRST202' || /could not find the function/i.test(r.error.message)) {
+      // Modo antiguo (falta ejecutar 02-ingreso-con-pin.sql): clave del local + PIN guardado en la lista.
+      setState({ pinServer: false });
+      if (email) await loadAll(); else setState({ status: 'signed-out' });
+      return;
+    }
+    setState({ status: 'error', error: describeError(r.error) });
+    return;
+  }
+  setState({ pinServer: true });
+  if (r.data) { await loadAll(); api.setUser(r.data as string); return; }
+  if (email) { await loadAll(); return; }
+  setState({ status: 'need-pin' });
+}
+
+/** Ingresar con PIN (validado en el servidor). */
+export async function staffLogin(pin: string): Promise<{ userId?: string; error?: string }> {
+  if (!supabase) return { error: 'Sin conexión' };
+  const r = await supabase.rpc('staff_login', { p_pin: pin });
+  if (r.error) return { error: /Demasiados/.test(r.error.message) ? r.error.message : describeError(r.error) };
+  if (!r.data) return { error: 'PIN incorrecto' };
+  if (state.status !== 'ready') await loadAll();
+  return { userId: r.data as string };
+}
+
+/** Salir: este celular pierde el acceso hasta que se ingrese otro PIN. */
+export async function staffLogout() {
+  if (!supabase || !state.pinServer) return;
+  await supabase.rpc('staff_logout');
+  if (!(await isEmailStaff())) {
+    channel?.unsubscribe();
+    channel = null;
+    setState({ status: 'need-pin' });
+  }
+}
+
+/** Crear o cambiar PIN, función o estado de un usuario. Devuelve un mensaje de error o null. */
+export async function setStaffPin(userId: string, pin: string, role: string, active: boolean): Promise<string | null> {
+  if (!supabase) return null;
+  const r = await supabase.rpc('set_staff_pin', { p_user: userId, p_pin: pin, p_role: role, p_active: active });
+  return r.error ? r.error.message : null;
 }
 
 /** La carta se puede leer sin clave (para la carta de clientes). */
@@ -117,7 +182,10 @@ async function loadAll() {
     api.replaceDb({ ...local, ...(catalog ?? catalogOf(local)), ...(staff ?? staffOf(local)), orders });
     // Primera vez: subir la carta y los usuarios iniciales.
     if (!catalog) queue.add('doc:catalog');
-    if (!staff) queue.add('doc:staff');
+    if (!staff) {
+      queue.add('doc:staff');
+      if (state.pinServer) for (const u of local.users) if (u.pin) await setStaffPin(u.id, u.pin, u.role, u.active);
+    }
     subscribeRealtime();
     setState({ status: 'ready', catalogReady: true });
     kick();
@@ -126,7 +194,7 @@ async function loadAll() {
   }
 }
 
-export function retryLoad() { loadAll(); }
+export function retryLoad() { void resolveAccess(); }
 
 /** Mensaje entendible para los errores de Supabase. */
 function describeError(e: unknown): string {

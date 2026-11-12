@@ -4,7 +4,7 @@ import type {
 } from '../types';
 import { DELIVERY_LABEL, KITCHEN_LABEL } from '../types';
 import { createSeed } from './seed';
-import { CLOUD, queueChanges, startCloud } from './cloud';
+import { CLOUD, queueChanges, startCloud, staffLogout } from './cloud';
 
 /**
  * Almacenamiento local (modo demo, un solo dispositivo; sincroniza entre pestañas).
@@ -89,7 +89,7 @@ function replaceDb(next: DB) {
   emit();
 }
 
-if (typeof window !== 'undefined') void startCloud({ getDb, replaceDb });
+if (typeof window !== 'undefined') void startCloud({ getDb, replaceDb, setUser: (id) => (id ? login(id) : logout()) });
 
 export const uid = (prefix = 'id') =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -116,6 +116,7 @@ export function login(userId: string) {
 }
 
 export function logout() {
+  if (CLOUD && sessionUserId) void staffLogout();
   sessionUserId = null;
   safeRemove(SESSION_KEY);
   sessionListeners.forEach((l) => l());

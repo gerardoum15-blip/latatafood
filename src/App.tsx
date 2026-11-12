@@ -10,7 +10,7 @@ import { KitchenScreen } from './screens/Kitchen';
 import { DriverScreen } from './screens/Driver';
 import { CustomerApp } from './screens/Customer';
 import logo from './assets/logo.webp';
-import { CLOUD, useCloud } from './data/cloud';
+import { CLOUD, staffLogin, useCloud } from './data/cloud';
 import { DeviceSetup, Loading } from './screens/Device';
 
 function useHash() {
@@ -29,6 +29,7 @@ export default function App() {
   const cloud = useCloud();
   if (hash === '#carta') return cloud.catalogReady ? <CustomerApp /> : <Loading text="Cargando la carta…" />;
   if (CLOUD && cloud.status === 'signed-out') return <DeviceSetup />;
+  if (CLOUD && cloud.status === 'need-pin') return <Login />;
   if (CLOUD && cloud.status !== 'ready') return <Loading />;
   if (!user) return <Login />;
   switch (user.role) {
@@ -56,17 +57,31 @@ function RoleShell({ label, main, local = 'all' }: { label: string; main: ReactN
 
 function Login() {
   const db = useDb();
+  const cloud = useCloud();
   const [pin, setPin] = useState('');
-  const [err, setErr] = useState(false);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
   const users = db.users.filter((u) => u.active);
+  const server = CLOUD && cloud.pinServer;
+
+  // Con la nube, el PIN se valida en el servidor y se confirma con "Entrar".
+  const submit = async (value: string) => {
+    if (value.length < 4 || busy) return;
+    setBusy(true);
+    const r = await staffLogin(value);
+    setBusy(false);
+    setPin('');
+    if (r.userId) login(r.userId); else setErr(r.error ?? 'PIN incorrecto');
+  };
 
   const press = (d: string) => {
-    setErr(false);
+    setErr('');
     const next = (pin + d).slice(0, 6);
     setPin(next);
+    if (server) { if (next.length === 6) void submit(next); return; }
     const match = users.find((u) => u.pin === next);
     if (match) { login(match.id); setPin(''); }
-    else if (next.length === 6) { setErr(true); setPin(''); }
+    else if (next.length === 6) { setErr('PIN incorrecto'); setPin(''); }
   };
 
   return (
@@ -77,13 +92,14 @@ function Login() {
         <div className={err ? 'pin-dots error' : 'pin-dots'} aria-live="polite">
           {Array.from({ length: Math.max(4, pin.length) }, (_, i) => <span key={i} className={i < pin.length ? 'on' : ''} />)}
         </div>
-        {err && <p className="err-text">PIN incorrecto</p>}
+        {err && <p className="err-text" role="alert">{err}</p>}
         <div className="keypad">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => <button key={d} onClick={() => press(d)}>{d}</button>)}
           <button onClick={() => setPin('')} aria-label="Borrar todo">C</button>
           <button onClick={() => press('0')}>0</button>
           <button onClick={() => setPin(pin.slice(0, -1))} aria-label="Borrar">⌫</button>
         </div>
+        {server && <button className="btn primary block" disabled={pin.length < 4 || busy} onClick={() => void submit(pin)}>{busy ? 'Verificando…' : 'Entrar'}</button>}
         <a className="btn block customer-entry" href="#carta">🍗 Soy cliente · Ver la carta y pedir</a>
         {!CLOUD && <details className="demo-users">
           <summary>Usuarios de prueba</summary>

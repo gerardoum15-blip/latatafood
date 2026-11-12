@@ -11,7 +11,7 @@ import { KitchenScreen } from './Kitchen';
 import { ReportsScreen } from './Reports';
 import { MenuAdmin } from './MenuAdmin';
 import { OrderLog } from './OrderLog';
-import { CLOUD, signOutDevice } from '../data/cloud';
+import { CLOUD, setStaffPin, signOutDevice, useCloud } from '../data/cloud';
 
 type Section = 'monitor' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
 
@@ -148,22 +148,39 @@ function Users() {
 
 function UserForm({ initial, isSelf, onClose }: { initial: User; isSelf: boolean; onClose: () => void }) {
   const db = useDb();
-  const [u, setU] = useState<User>(initial);
+  const cloud = useCloud();
+  const server = CLOUD && cloud.pinServer;
+  const [u, setU] = useState<User>(server ? { ...initial, pin: '' } : initial);
   const [err, setErr] = useState('');
-  const save = () => {
+  const [busy, setBusy] = useState(false);
+  const isNew = !u.id;
+  const save = async () => {
     if (!u.name.trim()) return setErr('Escribe un nombre.');
-    if (!/^\d{4,6}$/.test(u.pin)) return setErr('El PIN debe tener de 4 a 6 números.');
-    if (db.users.some((x) => x.id !== u.id && x.pin === u.pin && x.active)) return setErr('Ese PIN ya lo usa otro usuario.');
     if (u.role === 'cocina' && !u.localId) return setErr('Cocina debe tener un local asignado.');
+    if (server) {
+      // PIN cifrado en el servidor: vacío = no cambiar (obligatorio solo para usuarios nuevos).
+      if (u.pin && !/^\d{4,6}$/.test(u.pin)) return setErr('El PIN debe tener de 4 a 6 números.');
+      if (isNew && !u.pin) return setErr('Escribe un PIN para el nuevo usuario.');
+    } else {
+      if (!/^\d{4,6}$/.test(u.pin)) return setErr('El PIN debe tener de 4 a 6 números.');
+      if (db.users.some((x) => x.id !== u.id && x.pin === u.pin && x.active)) return setErr('Ese PIN ya lo usa otro usuario.');
+    }
+    const id = u.id || uid('u');
+    if (server) {
+      setBusy(true);
+      const e = await setStaffPin(id, u.pin, u.role, u.active);
+      setBusy(false);
+      if (e) return setErr(e);
+    }
     mutate((d) => {
-      const item = { ...u, name: u.name.trim(), id: u.id || uid('u') };
+      const item = { ...u, name: u.name.trim(), id, pin: server ? '' : u.pin };
       const i = d.users.findIndex((x) => x.id === item.id);
       if (i >= 0) d.users[i] = item; else d.users.push(item);
     });
     onClose();
   };
   return (
-    <Modal title={u.id ? 'Editar usuario' : 'Nuevo usuario'} onClose={onClose} footer={<button className="btn primary block" onClick={save}>Guardar</button>}>
+    <Modal title={u.id ? 'Editar usuario' : 'Nuevo usuario'} onClose={onClose} footer={<button className="btn primary block" disabled={busy} onClick={() => void save()}>{busy ? 'Guardando…' : 'Guardar'}</button>}>
       <label className="field"><span>Nombre</span><input value={u.name} onChange={(e) => setU({ ...u, name: e.target.value })} /></label>
       <label className="field"><span>Función</span>
         <select value={u.role} disabled={isSelf} onChange={(e) => setU({ ...u, role: e.target.value as Role })}>
@@ -176,7 +193,8 @@ function UserForm({ initial, isSelf, onClose }: { initial: User; isSelf: boolean
           {db.locales.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
       </label>
-      <label className="field"><span>PIN de ingreso (4 a 6 números)</span><input inputMode="numeric" value={u.pin} onChange={(e) => setU({ ...u, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} /></label>
+      <label className="field"><span>{server && !isNew ? 'Nuevo PIN (déjalo vacío para no cambiarlo)' : 'PIN de ingreso (4 a 6 números)'}</span><input id="u-pin" inputMode="numeric" autoComplete="off" value={u.pin} onChange={(e) => setU({ ...u, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} /></label>
+      {server && <p className="muted small">Los PIN se guardan cifrados: nadie puede verlos, solo cambiarlos.</p>}
       {!isSelf && <label className="check"><input type="checkbox" checked={u.active} onChange={(e) => setU({ ...u, active: e.target.checked })} /> Activo</label>}
       {err && <p className="err-text">{err}</p>}
     </Modal>
