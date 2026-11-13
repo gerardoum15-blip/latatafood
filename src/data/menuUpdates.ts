@@ -21,7 +21,9 @@ export const WEEKDAY_COMBOS: Product[] = [
 ];
 
 /** Agrega a la carta lo nuevo que aún no tenga (no toca lo que el administrador ya editó). */
-export function applyMenuUpdates(d: DB): boolean {
+type MenuPart = Pick<DB, 'groups' | 'products' | 'settings'>;
+
+export function applyMenuUpdates(d: MenuPart): boolean {
   let changed = false;
   const done = new Set(d.settings.menuUpdates ?? []);
   if (!done.has('combos-lv')) {
@@ -41,4 +43,14 @@ export function applyMenuUpdates(d: DB): boolean {
   }
   if (changed) d.settings.menuUpdates = [...done];
   return changed;
+}
+
+/** Carta recibida de la nube con lo nuevo ya incluido (solo en memoria; se guarda cuando entra el administrador). */
+export function patchCatalog<T extends Partial<MenuPart>>(c: T): T {
+  if (!c.products || !c.groups || !c.settings) return c;
+  const copy = { ...c, products: [...c.products], groups: [...c.groups], settings: { ...c.settings } } as T & MenuPart;
+  applyMenuUpdates(copy);
+  // No se marca como aplicado: así, al entrar el administrador, se guarda en la nube.
+  copy.settings.menuUpdates = c.settings.menuUpdates;
+  return copy;
 }

@@ -1,3 +1,4 @@
+import { patchCatalog } from './menuUpdates';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { DB, Order } from '../types';
@@ -164,7 +165,7 @@ export async function setStaffPin(userId: string, pin: string, role: string, act
 async function loadCatalog() {
   if (!supabase || !api) return;
   const { data, error } = await supabase.from('app_docs').select('data').eq('id', 'catalog').maybeSingle();
-  if (!error && data) api.replaceDb({ ...api.getDb(), ...(data.data as Catalog) });
+  if (!error && data) api.replaceDb({ ...api.getDb(), ...patchCatalog(data.data as Catalog) });
   setState({ catalogReady: true });
 }
 
@@ -187,7 +188,8 @@ async function loadAll() {
     const docs = await supabase.from('app_docs').select('id,data');
     if (docs.error) throw docs.error;
     const local = api.getDb();
-    const catalog = docs.data.find((d) => d.id === 'catalog')?.data as Catalog | undefined;
+    const rawCatalog = docs.data.find((d) => d.id === 'catalog')?.data as Catalog | undefined;
+    const catalog = rawCatalog ? patchCatalog(rawCatalog) : undefined;
     const staff = docs.data.find((d) => d.id === 'staff')?.data as Staff | undefined;
 
     const since = new Date(Date.now() - HISTORY_DAYS * 86400000).toISOString();
@@ -278,7 +280,7 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'app_docs' }, (p) => {
       const row = p.new as { id?: string; data?: Catalog | Staff };
       if (!row?.id || !row.data || !api || queue.has(`doc:${row.id}`)) return;
-      api.replaceDb({ ...api.getDb(), ...row.data });
+      api.replaceDb({ ...api.getDb(), ...(row.id === 'catalog' ? patchCatalog(row.data as Catalog) : row.data) });
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_locations' }, (p) => {
       const row = p.new as DriverLocation;
