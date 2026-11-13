@@ -4,6 +4,7 @@ import { PAY_LABEL } from '../types';
 import { discountTotal, orderTotal, packagingTotal } from '../data/store';
 import type { Report } from './reports';
 import { dateTime } from './format';
+import { driverName } from './drivers';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -49,7 +50,7 @@ export function exportReport(db: DB, rep: Report, title: string) {
     Ítems: o.items.map((i) => `${i.qty}× ${i.name}`).join(' | '),
     Empaques: o.packagingQty ?? 0, 'Monto empaques': r2(packagingTotal(o)), Descuento: r2(discountTotal(o)), 'Motivo descuento': [o.discount?.reason, ...o.items.map((i) => i.discount?.reason)].filter(Boolean).join(' | '), Total: r2(orderTotal(o)),
     Pago: o.payments.map((p) => PAY_LABEL[p.method]).join(' + '),
-    Driver: db.users.find((u) => u.id === o.driverId)?.name ?? '',
+    Driver: driverName(db, o.driverId),
   }))), 'Tickets');
 
   XLSX.writeFile(wb, `reporte-${title.replace(/[^\w-]+/g, '_')}.xlsx`);

@@ -11,9 +11,9 @@ import { KitchenScreen } from './Kitchen';
 import { ReportsScreen } from './Reports';
 import { MenuAdmin } from './MenuAdmin';
 import { OrderLog } from './OrderLog';
+import { driverList } from '../lib/drivers';
 import { DriversPanel } from './DriversPanel';
 import { CustomersScreen } from './Customers';
-import { LocalLocatorButton } from '../components/LocalLocator';
 import { TicketButton } from '../components/TicketButton';
 import { TicketSettingsCard } from './TicketSettings';
 import { RulesSettings } from './RulesSettings';
@@ -152,6 +152,7 @@ function Users() {
           </div>
         );
       })}
+      <DriversEditor />
       {CLOUD && <SecurityCard />}
       {edit && <UserForm initial={edit} isSelf={edit.id === me.id} onClose={() => setEdit(null)} />}
     </div>
@@ -236,7 +237,6 @@ function SettingsScreen() {
               <label className="field inline"><span>Mesas</span><input type="number" inputMode="numeric" value={l.tables} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.tables = Math.max(0, Number(e.target.value)); })} /></label>
             </div>
             <input value={localAddress(l)} placeholder="Dirección (la ven los clientes)" aria-label={`Dirección de ${l.name}`} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.address = e.target.value; })} />
-            <LocalLocatorButton local={l} />
             <input type="url" value={localMapsUrl(l)} placeholder="Enlace de Google Maps del local" aria-label={`Ubicación de ${l.name}`} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.mapsUrl = e.target.value; })} />
             <div className="pay-line">
               <label className="field inline"><span>Abre</span><input type="time" value={localOpen(l)} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.open = e.target.value; })} /></label>
@@ -296,6 +296,28 @@ function SecurityCard() {
       <ConfirmButton className="btn ghost danger" label="Cerrar sesión en todos los demás celulares" title="Cerrar todas las sesiones" message="Todos los celulares del personal (menos este) tendrán que volver a ingresar su código." confirmLabel="Cerrar sesiones"
         onConfirm={() => { void logoutAllDevices().then((r) => setMsg(r.error ? r.error : `Listo: se cerró la sesión en ${r.n} ${r.n === 1 ? 'celular' : 'celulares'}.`)); }} />
       {msg && <p className="notice">{msg}</p>}
+    </div>
+  );
+}
+
+/** Drivers: personas que reparten. Entran todas con un mismo usuario de función "Driver" y eligen quién maneja. */
+function DriversEditor() {
+  const db = useDb();
+  const list = driverList(db);
+  const save = (next: typeof list) => mutate((d) => { d.settings.drivers = next; });
+  const loginUsers = db.users.filter((u) => u.role === 'driver' && u.active);
+  return (
+    <div className="card ticket-settings">
+      <h3>🛵 Drivers (quién reparte)</h3>
+      <p className="muted small">Todos los drivers entran con el mismo código (usuario con función "Driver") y al entrar eligen su nombre. Los pedidos se reparten por turno entre los <b>activos</b>: desactiva a quien no trabaja hoy.</p>
+      {list.map((dr, i) => (
+        <div key={dr.id} className="pay-line">
+          <input aria-label="Nombre del driver" value={dr.name} onChange={(e) => save(list.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+          <label className="check"><input type="checkbox" checked={dr.active} onChange={(e) => save(list.map((x, j) => (j === i ? { ...x, active: e.target.checked } : x)))} /> Activo</label>
+        </div>
+      ))}
+      <button className="btn ghost small" onClick={() => save([...list, { id: uid('drv'), name: 'Nuevo driver', active: true }])}>+ Agregar driver</button>
+      <p className="muted small">Usuario de ingreso de drivers: {loginUsers.length ? loginUsers.map((u) => u.name).join(', ') : 'ninguno: crea un usuario con función "Driver"'}. Si quieres un solo código para todos, deja activo solo uno de esos usuarios.</p>
     </div>
   );
 }

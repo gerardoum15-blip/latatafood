@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore, useRef } from 'react';
 import { trackOrder, type RequestStatus } from '../data/cloud';
 import { LiveMap } from '../components/LazyMaps';
 import logo from '../assets/logo.webp';
@@ -88,10 +88,23 @@ function TrackerBody({ id }: { id: string }) {
   const mode = ((s?.mode as Mode) ?? 'delivery') in STEPS ? (s?.mode as Mode) ?? 'delivery' : 'delivery';
   const steps = STEPS[mode];
   const step = s ? stepOf(s, mode) : -1;
+  const [news, setNews] = useState('');
+  const prevStep = useRef<number | null>(null);
+  // Al cambiar de estado: vibra, suena y cambia el título de la pestaña para que el cliente esté atento.
+  useEffect(() => {
+    if (!s || s.status === 'rechazado') return;
+    const label = s.cancelled ? 'Pedido anulado' : step >= 0 ? steps[step] : '';
+    if (prevStep.current !== null && step !== prevStep.current && label) {
+      setNews(label);
+      alertCustomer(label);
+    }
+    prevStep.current = step;
+  }, [s, step, steps]);
 
   return (
     <div className="tracker">
       {s?.number ? <p className="track-number">Pedido <b>#{s.number}</b></p> : null}
+      {news && <div className="track-news" role="alert">🔔 Tu pedido cambió: <b>{news}</b></div>}
       {!loaded && <p className="muted">Consultando…</p>}
       {loaded && !s && <p className="muted">No encontramos este pedido. Escríbenos al WhatsApp {db.settings.whatsapp}.</p>}
       {s?.status === 'rechazado' && (
@@ -125,9 +138,30 @@ function TrackerBody({ id }: { id: string }) {
               <LiveMap points={[{ id: 'driver', lat: s.location.lat, lng: s.location.lng, label: (s.driver ?? 'Motorizado').split(' ')[0], kind: 'driver' }]} height={240} />
             </div>
           )}
-          <p className="muted small">Se actualiza solo cada pocos segundos.</p>
+          <p className="muted small">Se actualiza solo cada pocos segundos. Deja esta página abierta: te avisaremos con sonido y vibración cuando cambie el estado. También te escribiremos por WhatsApp.</p>
         </>
       )}
     </div>
   );
+}
+
+/** Aviso al cliente: vibración, un "ding" y título de la pestaña. */
+function alertCustomer(label: string) {
+  try { navigator.vibrate?.([200, 100, 200]); } catch { /* no disponible */ }
+  try {
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (AC) {
+      const ctx = new AC();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.frequency.value = 880; g.gain.setValueAtTime(0.2, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.6);
+      setTimeout(() => void ctx.close(), 1000);
+    }
+  } catch { /* sin sonido */ }
+  if (document.hidden) {
+    const old = document.title;
+    document.title = `🔔 ${label}`;
+    const back = () => { if (!document.hidden) { document.title = old; document.removeEventListener('visibilitychange', back); } };
+    document.addEventListener('visibilitychange', back);
+  }
 }

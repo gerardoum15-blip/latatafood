@@ -6,7 +6,9 @@ import { isUrl, trackUrl, waLink } from '../lib/whatsapp';
 import { dateShort, minutesAgo } from '../lib/format';
 import { CLOUD, resolveRequest, useRequests, type OrderRequest } from '../data/cloud';
 import { beep } from './Kitchen';
+import { driverName } from '../lib/drivers';
 import { buildCustomers, phoneId, TIER_LABEL } from '../lib/customers';
+import { useLocalGeo } from '../lib/useLocalGeo';
 import { deliveryFeeFor, kmLabel, maxDeliveryKm, nearestLocal, roadKm } from '../lib/rules';
 import { LocalPicker } from '../components/shared';
 import { NewItems, type InitialOrder } from './Waiter';
@@ -22,6 +24,8 @@ export function DeliveryScreen() {
   const db = useDb();
   const user = useSession()!;
   const fixed = user.role === 'delivery' && !!user.localId;
+  /** Solo el mozo delivery confirma o rechaza pedidos de la carta. */
+  const canValidate = user.role === 'delivery';
   // El mozo delivery decide en cada pedido qué local lo prepara (según demanda o cercanía).
   const defaultLocal = fixed ? user.localId! : '';
   const [localId, setLocalId] = useState<string>(defaultLocal);
@@ -59,6 +63,7 @@ export function DeliveryScreen() {
     setPickup(r.pickup);
     setPayOk(false);
     setLocalId(r.localId ?? defaultLocal);
+    setLocalManual(false);
     if (r.pay) setPay(r.pay);
     setCashWith(r.cashWith ? String(r.cashWith) : '');
     setInitial({ cart: r.cart, picks: r.creamPicks, pkgAmount: r.packaging, note: [r.pickup ? 'RECOJO EN LOCAL' : '', r.dineIn ? 'COMER EN MESA' : '', r.note].filter(Boolean).join(' · ') });
@@ -84,7 +89,8 @@ export function DeliveryScreen() {
     ? !!(customer.name.trim() && dineIn.table)
     : !!(customer.name.trim() && customer.phone.trim() && (customer.address.trim() || isUrl(customer.mapsUrl)) && (!customer.mapsUrl.trim() || isUrl(customer.mapsUrl)));
   const canSend = valid && !!localId && (!activeReq || payOk);
-  const turnDriver = db.users.find((u) => u.id === nextDriver(db));
+  const turnDriverId = nextDriver(db);
+  const turnDriver = turnDriverId ? { name: driverName(db, turnDriverId) } : undefined;
 
   // Ficha del cliente por su WhatsApp (pedidos anteriores, direcciones guardadas).
   const customers = useMemo(() => buildCustomers(db), [db]);
@@ -93,10 +99,17 @@ export function DeliveryScreen() {
   // Costo de delivery sugerido por distancia (si hay ubicación del cliente y del local).
   const point = customer.lat != null && customer.lng != null ? { lat: customer.lat, lng: customer.lng } : null;
   const km = point && local ? roadKm(db, local, point) : null;
+  useLocalGeo(db);
   const near = point ? nearestLocal(db, point) : null;
+  // Por defecto atiende el local más cercano al cliente (el mozo puede cambiarlo).
+  const [localManual, setLocalManual] = useState(false);
+  const nearId = near?.local.id;
+  useEffect(() => {
+    if (nearId && !localManual && !dineIn && !pickup && !fixed) setLocalId(nearId);
+  }, [nearId, localManual, dineIn, pickup, fixed]);
   const suggestedFee = km != null ? deliveryFeeFor(db, km) : null;
   const [feeManual, setFeeManual] = useState<string | null>(null);
-  // Más allá de la zona (3 km): el envío va por InDrive y lo coordina el mozo delivery o el cliente.
+  // Más allá de la zona (4 km): el envío va por InDrive y lo coordina el mozo delivery o el cliente.
   const [indriveManual, setIndriveManual] = useState<boolean | null>(null);
   const outOfZone = km != null && suggestedFee === null;
   const indrive = !dineIn && !pickup && (indriveManual ?? outOfZone);
@@ -145,6 +158,7 @@ export function DeliveryScreen() {
         {CLOUD && (
           <section className="web-inbox" aria-label="Pedidos web por validar">
             <h3>Pedidos web por validar <span className="count">{pending.length}</span></h3>
+            <p className="muted small">Ningún pedido de la carta va a cocina sin que el <b>mozo delivery</b> lo revise, valide el pago y lo confirme al cliente por WhatsApp.</p>
             {pending.length === 0 && <p className="muted small">Cuando un cliente pida desde la carta, aparecerá aquí al instante.</p>}
             {pending.map((r) => (
               <article key={r.id} className={activeReq?.id === r.id ? 'card web-req active' : 'card web-req'}>
@@ -153,10 +167,12 @@ export function DeliveryScreen() {
                 <div className="muted small">{r.data.items.filter((i) => !i.productId.startsWith('extras:')).map((i) => `${i.qty}× ${i.name}`).join(', ')}</div>
                 <div className="row between wrap">
                   <b>{money(r.data.total)}</b>
-                  <div className="row gap">
-                    <button className="btn small ghost danger" onClick={() => { setRejecting(r); setRejectReason(''); }}>Rechazar</button>
-                    <button className="btn small primary" onClick={() => openRequest(r)}>{activeReq?.id === r.id ? 'Revisando…' : 'Revisar'}</button>
-                  </div>
+                  {canValidate ? (
+                    <div className="row gap">
+                      <button className="btn small ghost danger" onClick={() => { setRejecting(r); setRejectReason(''); }}>Rechazar</button>
+                      <button className="btn small primary" onClick={() => openRequest(r)}>{activeReq?.id === r.id ? 'Revisando…' : 'Revisar'}</button>
+                    </div>
+                  ) : <span className="muted small">Lo confirma el mozo delivery</span>}
                 </div>
               </article>
             ))}
@@ -212,7 +228,7 @@ export function DeliveryScreen() {
           {!dineIn && !pickup && !indrive && turnDriver && <p className="full small muted">Driver de turno: <b>{turnDriver.name}</b> (se asigna solo)</p>}
           <div className="full">
             <span className="muted small">Cocina que prepara el pedido</span>
-            <LocalPicker value={localId} onChange={setLocalId} fixed={fixed} />
+            <LocalPicker value={localId} onChange={(v) => { setLocalId(v); setLocalManual(true); }} fixed={fixed} />
             {!localId && <p className="err-text small">Elige qué local prepara este pedido (según la demanda o la cercanía al cliente).</p>}
             {!localId && customer.mapsUrl && <p className="small"><a href={customer.mapsUrl} target="_blank" rel="noreferrer">Ver la ubicación del cliente en el mapa</a></p>}
           </div>
@@ -225,7 +241,6 @@ export function DeliveryScreen() {
                 <span className="small">{profile.orders} {profile.orders === 1 ? 'pedido' : 'pedidos'} · {money(profile.spent)} · último {dateShort(profile.last)}</span>
               </div>
               {!customer.name && profile.name && <button className="link small" onClick={() => setCustomer({ ...customer, name: profile.name })}>Usar el nombre "{profile.name}"</button>}
-              {profile.suggestedPct > 0 && <p className="small">Descuento sugerido por ser {profile.tier === 'vip' ? 'VIP' : 'frecuente'}: <b>{profile.suggestedPct}%</b> (aplícalo en "Descuento al pedido").</p>}
               {profile.addresses.length > 0 && (
                 <div className="saved-addr">
                   <span className="muted small">Direcciones guardadas:</span>
@@ -284,7 +299,7 @@ export function DeliveryScreen() {
         }
         if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
         setSent({ id, ref: activeReq?.id ?? id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: dineIn ? 0 : fee, packagingAmount: dineIn ? 0 : pkg.amount, discount }) });
-        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal); setFeeManual(null); setIndriveManual(null); lastAutofill.current = '';
+        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal); setLocalManual(false); setFeeManual(null); setIndriveManual(null); lastAutofill.current = '';
       }}
     />
   );

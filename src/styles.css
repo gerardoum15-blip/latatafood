@@ -502,3 +502,9 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .fee-note { margin: 0; padding: 8px 10px; background: var(--ok-soft); color: var(--ok); border-radius: 10px; }
 .indrive-note { margin: 0; padding: 8px 10px; background: #fff7e0; color: #7a4a00; border-radius: 10px; }
 .self-delivery { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
+.who-list { display: flex; flex-direction: column; gap: 10px; }
+.who-btn { justify-content: flex-start; font-size: 1.1rem; }
+.who-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+.reassign select { width: auto; min-height: 36px; }
+.track-news { background: #fff4d6; border: 1px solid #f0c040; color: #5a3d00; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.notify-btn { align-self: flex-start; }

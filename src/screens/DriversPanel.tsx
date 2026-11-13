@@ -6,6 +6,7 @@ import { dayKey, money, orderNo, time } from '../lib/format';
 import { LiveMap } from '../components/LazyMaps';
 import type { MapPoint } from '../lib/geo';
 import { Empty, useTick } from '../components/ui';
+import { activeDrivers } from '../lib/drivers';
 
 const minsAgo = (iso: string) => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
 const ageText = (m: number) => (m < 1 ? 'ahora' : m < 60 ? `hace ${m} min` : `hace ${Math.floor(m / 60)} h`);
@@ -16,7 +17,7 @@ export function DriversPanel({ showMoney }: { showMoney?: boolean }) {
   const locs = useDriverLocations();
   useTick(20000);
   const [day, setDay] = useState(dayKey(Date.now()));
-  const drivers = db.users.filter((u) => u.role === 'driver' && u.active);
+  const drivers = activeDrivers(db);
 
   const points: MapPoint[] = useMemo(() => locs
     .filter((l) => drivers.some((d) => d.id === l.user_id) && minsAgo(l.updated_at) < 12 * 60)

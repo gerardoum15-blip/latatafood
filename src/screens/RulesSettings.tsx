@@ -1,6 +1,6 @@
 import { mutate, useDb } from '../data/store';
 import { money } from '../lib/format';
-import { deliveryTiers, kmLabel, loyalty, packagingMax, packagingTiers, payInfo, roadFactor, waitTiers } from '../lib/rules';
+import { DELIVERY_TIERS_VERSION, deliveryTiers, kmLabel, loyalty, packagingMax, packagingTiers, payInfo, roadFactor, waitTiers } from '../lib/rules';
 
 /** Ajustes: empaques por precio, tiempo de espera y datos de pago. */
 export function RulesSettings() {
@@ -11,7 +11,7 @@ export function RulesSettings() {
   const setPT = (next: typeof pt) => mutate((d) => { d.settings.packagingTiers = next; });
   const setWT = (next: typeof wt) => mutate((d) => { d.settings.waitTiers = next; });
   const dt = deliveryTiers(db);
-  const setDT = (next: typeof dt) => mutate((d) => { d.settings.deliveryTiers = next; });
+  const setDT = (next: typeof dt) => mutate((d) => { d.settings.deliveryTiers = next; d.settings.deliveryTiersV = DELIVERY_TIERS_VERSION; });
   const ly = loyalty(db);
   const setLY = (patch: Partial<typeof ly>) => mutate((d) => { d.settings.loyalty = { ...loyalty(d), ...patch }; });
   return (
@@ -65,10 +65,9 @@ export function RulesSettings() {
       <div className="card ticket-settings">
         <h3>Clientes frecuentes</h3>
         <p className="muted small">El cliente se reconoce por su número de WhatsApp. El mozo delivery ve su ficha al escribir el número.</p>
-        <div className="tier-row muted small"><span>Desde N pedidos</span><span>Descuento sugerido %</span><span /></div>
-        <div className="tier-row"><input type="number" inputMode="numeric" aria-label="Frecuente desde" value={ly.frequentMin} onChange={(e) => setLY({ frequentMin: Number(e.target.value) })} /><input type="number" inputMode="numeric" aria-label="Descuento frecuente" value={ly.frequentPct} onChange={(e) => setLY({ frequentPct: Number(e.target.value) })} /><span>⭐</span></div>
-        <div className="tier-row"><input type="number" inputMode="numeric" aria-label="VIP desde" value={ly.vipMin} onChange={(e) => setLY({ vipMin: Number(e.target.value) })} /><input type="number" inputMode="numeric" aria-label="Descuento VIP" value={ly.vipPct} onChange={(e) => setLY({ vipPct: Number(e.target.value) })} /><span>👑</span></div>
-        <p className="muted small">Con 0% no se sugiere descuento; solo se muestra la etiqueta.</p>
+        <label className="field"><span>⭐ Frecuente desde (pedidos)</span><input id="ly-freq" type="number" inputMode="numeric" value={ly.frequentMin} onChange={(e) => setLY({ frequentMin: Number(e.target.value) })} /></label>
+        <label className="field"><span>👑 VIP desde (pedidos)</span><input id="ly-vip" type="number" inputMode="numeric" value={ly.vipMin} onChange={(e) => setLY({ vipMin: Number(e.target.value) })} /></label>
+        <p className="muted small">Sin descuentos: sirve para atenderlos más rápido (nombre y dirección se llenan solos).</p>
       </div>
 
       <div className="card ticket-settings">

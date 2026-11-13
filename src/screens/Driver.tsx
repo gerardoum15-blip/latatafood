@@ -5,6 +5,7 @@ import { DELIVERY_LABEL, KITCHEN_LABEL, PAY_LABEL, type Order } from '../types';
 import { money, minutesAgo, time, orderNo } from '../lib/format';
 import { fillTemplate, mapsLink, trackUrl, waLink } from '../lib/whatsapp';
 import { Empty, ItemLines, useTick } from '../components/ui';
+import { activeDrivers, driverName } from '../lib/drivers';
 import { TicketButton } from '../components/TicketButton';
 
 type ShareState = 'starting' | 'on' | 'denied' | 'error' | 'unsupported';
@@ -17,9 +18,10 @@ const metersBetween = (a: GeolocationCoordinates, b: GeolocationCoordinates) => 
 };
 
 /** Comparte la ubicación del driver mientras tiene la app abierta (y mantiene la pantalla encendida). */
-function useShareLocation(): ShareState {
+function useShareLocation(driverId: string | null): ShareState {
   const [state, setState] = useState<ShareState>('starting');
   useEffect(() => {
+    if (!driverId) return;
     if (!CLOUD) return;
     if (!('geolocation' in navigator)) { setState('unsupported'); return; }
     let lastSent = 0;
@@ -38,19 +40,19 @@ function useShareLocation(): ShareState {
         if (Date.now() - lastSent < 10000 && moved < 25) return;
         lastSent = Date.now();
         lastPos = p.coords;
-        if (await sendMyLocation(p.coords)) setState('error');
+        if (await sendMyLocation(p.coords, driverId)) setState('error');
       },
       (err) => setState(err.code === err.PERMISSION_DENIED ? 'denied' : 'error'),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
-    const heartbeat = setInterval(() => { if (lastPos) void sendMyLocation(lastPos); }, 60000);
+    const heartbeat = setInterval(() => { if (lastPos) void sendMyLocation(lastPos, driverId); }, 60000);
     return () => {
       navigator.geolocation.clearWatch(watch);
       clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', onVisible);
       void lock?.release?.();
     };
-  }, []);
+  }, [driverId]);
   return state;
 }
 
@@ -62,25 +64,61 @@ function ShareBanner({ state }: { state: ShareState }) {
   return <p className="share-banner off" role="alert">No se pudo compartir tu ubicación. Revisa que el GPS esté encendido y recarga la app.</p>;
 }
 
-export function DriverScreen() {
+const WHO_KEY = 'latatafood-driver-actual';
+
+/** Quién maneja en este celular (todos los drivers entran con el mismo código). */
+function useDriverIdentity(): [string | null, (id: string | null) => void] {
   const db = useDb();
   const user = useSession()!;
+  const [id, setId] = useState<string | null>(() => {
+    try { return localStorage.getItem(WHO_KEY); } catch { return null; }
+  });
+  const list = activeDrivers(db);
+  const valid = id && list.some((d) => d.id === id) ? id : list.some((d) => d.id === user.id) && !id ? user.id : null;
+  const set = (v: string | null) => {
+    setId(v);
+    try { if (v) localStorage.setItem(WHO_KEY, v); else localStorage.removeItem(WHO_KEY); } catch { /* sin almacenamiento */ }
+  };
+  return [valid, set];
+}
+
+export function DriverScreen() {
+  const db = useDb();
+  const [me, setMe] = useDriverIdentity();
   useTick();
+  const share = useShareLocation(me);
+
+  if (!me) {
+    const list = activeDrivers(db);
+    return (
+      <div className="page">
+        <h2>¿Quién maneja en este celular?</h2>
+        <p className="muted">Elige tu nombre. Tus pedidos y tu ubicación quedarán a tu nombre.</p>
+        {list.length === 0 && <Empty>No hay drivers activos. Pide al administrador que los agregue en Usuarios → Drivers.</Empty>}
+        <div className="who-list">
+          {list.map((d) => <button key={d.id} className="btn big who-btn" onClick={() => setMe(d.id)}>🛵 {d.name}</button>)}
+        </div>
+      </div>
+    );
+  }
 
   const deliveries = db.orders.filter((o) => o.channel === 'delivery' && !o.cancelled);
-  const mine = deliveries.filter((o) => !o.closed && o.driverId === user.id).sort((a, b) => a.createdAt - b.createdAt);
+  const mine = deliveries.filter((o) => !o.closed && o.driverId === me).sort((a, b) => a.createdAt - b.createdAt);
   const start = new Date(); start.setHours(0, 0, 0, 0);
-  const today = deliveries.filter((o) => o.closed && o.driverId === user.id && (o.closedAt ?? 0) >= start.getTime());
+  const today = deliveries.filter((o) => o.closed && o.driverId === me && (o.closedAt ?? 0) >= start.getTime());
   const cashToday = today.reduce((s, o) => s + o.payments.filter((p) => p.method === 'efectivo').reduce((a, p) => a + p.amount, 0), 0);
 
-  const share = useShareLocation();
   return (
     <div className="page">
+      <div className="card who-bar">
+        <span className="grow">Manejas: <b>{driverName(db, me)}</b></span>
+        <button className="btn small" onClick={() => setMe(null)}>Cambiar</button>
+      </div>
       <ShareBanner state={share} />
       <section className="driver-section">
         <h2>Mis pedidos <span className="count">{mine.length}</span></h2>
         {mine.length === 0 ? <Empty>No tienes pedidos asignados. Te llegarán por turno.</Empty> : (
-          <div className="cards">{mine.map((o) => <DriverCard key={o.id} order={o} />)}</div>
+          <div className="cards">{mine.map((o) => <DriverCard key={o.id} order={o} me={me} />)}</div>
         )}
       </section>
 
@@ -97,7 +135,7 @@ export function DriverScreen() {
   );
 }
 
-function DriverCard({ order, available }: { order: Order; available?: boolean }) {
+function DriverCard({ order, available, me }: { order: Order; available?: boolean; me?: string }) {
   const db = useDb();
   const user = useSession()!;
   const c = order.customer!;
@@ -112,7 +150,7 @@ function DriverCard({ order, available }: { order: Order; available?: boolean })
   const msg = (tpl: string, track = false) => waLink(c.phone, fillTemplate(track && !tpl.includes('{seguimiento}') ? `${tpl}\nSigue tu pedido aquí: {seguimiento}` : tpl, {
     seguimiento: trackUrl(order.id),
     cliente: c.name.split(' ')[0], numero: String(order.number), negocio: db.settings.businessName,
-    driver: user.name.split(' ')[0], total: money(total), pago: payText, local: local?.name ?? '',
+    driver: (driverName(db, me ?? order.driverId) || user.name).split(' ')[0], total: money(total), pago: payText, local: local?.name ?? '',
   }));
 
   const st = order.deliveryStatus;
@@ -145,6 +183,13 @@ function DriverCard({ order, available }: { order: Order; available?: boolean })
 
       <details><summary>Ver pedido ({order.items.reduce((s, i) => s + i.qty, 0)} ítems)</summary><ItemLines items={order.items} /></details>
 
+      {!available && !order.closed && (
+        <label className="field inline reassign"><span>Lo lleva</span>
+          <select aria-label="Quién lleva este pedido" value={order.driverId ?? ''} onChange={(e) => assignDriver(order.id, e.target.value || null, user)}>
+            {activeDrivers(db).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </label>
+      )}
       {available ? (
         <button className="btn primary block" onClick={() => assignDriver(order.id, user.id, user)}>Tomar este pedido</button>
       ) : (

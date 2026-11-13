@@ -1,6 +1,7 @@
 import type { Channel, DB, Order, PayMethod } from '../types';
 import { discountTotal, lineTotal, orderTotal, packagingTotal } from '../data/store';
 import { dayKey } from './format';
+import { driverName } from './drivers';
 
 export type Period = 'hoy' | 'ayer' | 'semana' | 'mes' | 'anio' | 'rango';
 
@@ -146,7 +147,7 @@ export function buildReport(db: DB, f: ReportFilter): Report {
     locals.set(o.localId, lr);
 
     if (o.channel === 'delivery') {
-      const name = db.users.find((u) => u.id === o.driverId)?.name ?? 'Sin driver';
+      const name = driverName(db, o.driverId) || 'Sin driver';
       const dr = drivers.get(name) ?? { name, count: 0, total: 0 };
       dr.count++; dr.total += t;
       drivers.set(name, dr);

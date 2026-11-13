@@ -3,6 +3,7 @@ import { setKitchenStatus, useDb, useSession } from '../data/store';
 import type { KitchenStatus, Order } from '../types';
 import { minutesAgo, time, orderNo } from '../lib/format';
 import { LocalPicker, useWorkLocal } from '../components/shared';
+import { driverName } from '../lib/drivers';
 import { Empty, ItemLines, useTick } from '../components/ui';
 
 const NEXT: Record<KitchenStatus, { to: KitchenStatus; label: string } | null> = {
@@ -93,7 +94,7 @@ function KitchenTicket({ order }: { order: Order }) {
   const lastRound = Math.max(...order.items.map((i) => i.round));
   const items = order.kitchenStatus === 'listo' ? order.items : order.items.filter((i) => i.round === lastRound);
   const wait = minutesAgo(order.sentAt);
-  const driver = db.users.find((u) => u.id === order.driverId);
+  const driver = order.driverId ? { name: driverName(db, order.driverId) } : undefined;
   return (
     <article className={`kticket ${wait >= 20 && order.kitchenStatus !== 'listo' ? 'late' : ''}`}>
       <header>

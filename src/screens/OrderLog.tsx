@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react';
 import { assignDriver, cancelOrder, deleteOrder, orderTotal, packagingTotal, setDeliveryStatus, useDb, useSession, withoutDriver } from '../data/store';
 import { PAY_LABEL, type Order } from '../types';
 import { dayKey, money, time, orderNo } from '../lib/format';
-import { orderStage, stageHint, STAGE_LABEL, STAGES, type Stage } from '../lib/status';
+import { customerStatusText, orderStage, stageHint, STAGE_LABEL, STAGES, type Stage } from '../lib/status';
+import { trackUrl, waLink } from '../lib/whatsapp';
 import { LocalPicker } from '../components/shared';
+import { activeDrivers, driverName } from '../lib/drivers';
 import { ConfirmButton, Empty, ItemLines, Timeline, useTick } from '../components/ui';
 import { TicketButton } from '../components/TicketButton';
 
@@ -66,8 +68,8 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
   const st = orderStage(order);
   const hint = stageHint(order);
   const local = db.locales.find((l) => l.id === order.localId);
-  const driver = db.users.find((u) => u.id === order.driverId);
-  const drivers = db.users.filter((u) => u.role === 'driver' && u.active);
+  const driver = order.driverId ? { name: driverName(db, order.driverId) } : undefined;
+  const drivers = activeDrivers(db);
   const pkg = packagingTotal(order);
   return (
     <article className={`card log-ticket st-${st}`}>
@@ -106,6 +108,12 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
           )}
           <button className="btn small ok" onClick={() => setDeliveryStatus(order.id, 'entregado', me)}>✅ {order.selfDelivery === 'indrive' ? 'Entregado' : 'Entregado al cliente'}</button>
         </div>
+      )}
+      {order.channel === 'delivery' && order.customer?.phone && !order.cancelled && (me.role === 'delivery' || me.role === 'admin') && st !== 'entregado' && (
+        <a className="btn small wa notify-btn" target="_blank" rel="noreferrer"
+          href={waLink(order.customer.phone, customerStatusText(order, db.settings.businessName, trackUrl(order.id), driver?.name))}>
+          💬 Avisar al cliente: {STAGE_LABEL[st]}
+        </a>
       )}
       {admin && (
         <div className="row gap wrap">

@@ -562,9 +562,15 @@ export function upsertDriverLocation(row: DriverLocation) {
 }
 
 /** El celular del driver envía su ubicación. Devuelve un error o null. */
-export async function sendMyLocation(c: GeolocationCoordinates): Promise<string | null> {
+export async function sendMyLocation(c: GeolocationCoordinates, driverId?: string | null): Promise<string | null> {
   if (!supabase) return null;
-  const r = await supabase.rpc('update_my_location', { p_lat: c.latitude, p_lng: c.longitude, p_accuracy: c.accuracy ?? null, p_heading: c.heading ?? null, p_speed: c.speed ?? null });
+  const args = { p_lat: c.latitude, p_lng: c.longitude, p_accuracy: c.accuracy ?? null, p_heading: c.heading ?? null, p_speed: c.speed ?? null };
+  // Con un solo usuario de drivers, la ubicación se guarda a nombre de quien maneja (08-drivers.sql).
+  const r = driverId ? await supabase.rpc('update_my_location', { ...args, p_driver: driverId }) : await supabase.rpc('update_my_location', args);
+  if (r.error && driverId && (r.error.code === 'PGRST202' || /could not find/i.test(r.error.message))) {
+    const old = await supabase.rpc('update_my_location', args);
+    return old.error ? old.error.message : null;
+  }
   return r.error ? r.error.message : null;
 }
 

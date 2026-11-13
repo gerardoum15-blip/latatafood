@@ -9,6 +9,7 @@ import { CLOUD, submitOrderRequest, useKitchenQueue, type WebOrder } from '../da
 import { OrderTracker, rememberTracking, useTracking } from './OrderTracker';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
+import { useLocalGeo } from '../lib/useLocalGeo';
 import { deliveryFeeFor, hoursLabel, kmLabel, localAddress, localMapsUrl, maxDeliveryKm, nearestLocal, payInfo, suggestPackaging, waitMinutes } from '../lib/rules';
 import logo from '../assets/logo.webp';
 
@@ -101,6 +102,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const count = cart.reduce((s, i) => s + i.qty, 0);
   const pkg = mode === 'mesa' ? { qty: 0, amount: 0 } : suggestPackaging(cart, db);
   // Delivery: costo según la distancia al local más cercano (si los locales están ubicados).
+  useLocalGeo(db);
   const near = mode === 'delivery' && loc ? nearestLocal(db, loc) : null;
   const fee = near ? deliveryFeeFor(db, near.km) : null;
   const outOfZone = !!near && fee === null;
@@ -221,7 +223,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
                   v: 1,
                   deliveryFee: mode === 'delivery' ? fee : null, distanceKm: near?.km ?? null,
                   customer: { label: mode === 'delivery' ? addrLabel : undefined, name: client.name, phone: client.phone, address: mode === 'delivery' ? address.trim() : mode === 'mesa' ? `Mesa ${tableNo} · ${local?.name ?? ''}` : `Recojo en ${local?.name ?? 'local'}`, mapsUrl: mode === 'delivery' ? maps : '', lat: mode === 'delivery' ? loc?.lat ?? null : null, lng: mode === 'delivery' ? loc?.lng ?? null : null },
-                  mode, table: mode === 'mesa' ? tableNo : null, localId: mode === 'delivery' ? null : localId, pay, cashWith: pay === 'efectivo' && cash ? Number(cash) : null, note: note.trim(),
+                  mode, table: mode === 'mesa' ? tableNo : null, localId: mode === 'delivery' ? near?.local.id ?? null : localId, pay, cashWith: pay === 'efectivo' && cash ? Number(cash) : null, note: note.trim(),
                   items: cart, creamPicks: picks, packagingQty: pkg.qty, packagingAmount: pkg.amount, total,
                 };
                 if (CLOUD) {
@@ -278,7 +280,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
                   <span className="muted small">Guardar como:</span>
                   {['Casa', 'Oficina', 'Otra'].map((l) => <button key={l} role="radio" aria-checked={addrLabel === l} className={addrLabel === l ? 'seg active' : 'seg'} onClick={() => setAddrLabel(l)}>{l}</button>)}
                 </div>
-                {near && fee != null && <p className="small fee-note">🛵 Delivery: <b>{money(fee)}</b> · aprox. {kmLabel(near.km)} de {near.local.name}</p>}
+                {near && fee != null && <p className="small fee-note">🛵 Delivery: <b>{money(fee)}</b> · aprox. {kmLabel(near.km)} · te atiende <b>{near.local.name}</b> (el más cercano)</p>}
                 <label className="field"><span>Dirección de envío</span><input id="c-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, referencia" /><span className="muted small">Revisa y agrega referencias (piso, color de puerta…).</span></label>
                 {pkg.amount > 0 && <p className="muted small">Empaques: {pkg.qty} {pkg.qty === 1 ? 'táper' : 'táperes'} = {money(pkg.amount)}</p>}
               </>

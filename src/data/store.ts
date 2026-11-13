@@ -4,6 +4,7 @@ import type {
 } from '../types';
 import { DELIVERY_LABEL, KITCHEN_LABEL } from '../types';
 import { createSeed } from './seed';
+import { activeDrivers, driverList, driverName } from '../lib/drivers';
 import { CLOUD, deleteOrderCloud, queueChanges, startCloud, staffLogout } from './cloud';
 
 /**
@@ -173,7 +174,7 @@ export const withoutDriver = (o: Order) => o.channel === 'delivery' && (!!o.self
 
 /** Driver de turno: el que hace más tiempo no recibe un pedido (rotación). */
 export function nextDriver(d: DB): string | null {
-  const drivers = d.users.filter((u) => u.role === 'driver' && u.active);
+  const drivers = activeDrivers(d);
   if (!drivers.length) return null;
   const last = new Map<string, number>();
   for (const o of d.orders) if (o.channel === 'delivery' && o.driverId) last.set(o.driverId, Math.max(last.get(o.driverId) ?? 0, o.createdAt));
@@ -206,7 +207,7 @@ export function createOrder({ pickup, indrive, ...input }: NewOrderInput, user: 
       readyAt: null,
       closedAt: null,
       ...(pickup ? { selfDelivery: 'recojo' as const } : indrive ? { selfDelivery: 'indrive' as const } : {}),
-      history: [event(user, 'Pedido creado y enviado a cocina'), ...(indrive ? [event(user, 'Fuera de zona: envío por InDrive')] : []), ...(input.discount ? [event(user, `Descuento al pedido: S/ ${input.discount.amount.toFixed(2)} (${input.discount.reason})`)] : []), ...(input.driverId ? [event(user, `Driver de turno: ${d.users.find((u) => u.id === input.driverId)?.name ?? ''}`)] : [])],
+      history: [event(user, 'Pedido creado y enviado a cocina'), ...(indrive ? [event(user, 'Fuera de zona: envío por InDrive')] : []), ...(input.discount ? [event(user, `Descuento al pedido: S/ ${input.discount.amount.toFixed(2)} (${input.discount.reason})`)] : []), ...(input.driverId ? [event(user, `Driver de turno: ${driverName(d, input.driverId)}`)] : [])],
       sunat: { status: 'no_emitido', type: null },
     });
   });
@@ -260,7 +261,7 @@ export function setDeliveryStatus(orderId: string, status: DeliveryStatus, user:
 export function assignDriver(orderId: string, driverId: string | null, user: User) {
   withOrder(orderId, (o, d) => {
     o.driverId = driverId;
-    const name = d.users.find((u) => u.id === driverId)?.name ?? 'sin asignar';
+    const name = driverName(d, driverId) || 'sin asignar';
     o.history.push(event(user, `Driver asignado: ${name}`));
   });
 }
@@ -316,7 +317,7 @@ export function resetAll() {
 export function generateDemoSales(days = 60) {
   mutate((d) => {
     const products = d.products.filter((p) => p.active);
-    const drivers = d.users.filter((u) => u.role === 'driver');
+    const drivers = driverList(d);
     const methods: PayMethod[] = ['efectivo', 'efectivo', 'yape', 'yape', 'plin', 'tarjeta'];
     const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
     const now = new Date();

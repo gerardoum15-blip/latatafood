@@ -1,3 +1,4 @@
+import { cachedLocalGeo } from './localGeoCache';
 import type { DB, Local, OrderItem } from '../types';
 
 /** Reglas del negocio que el administrador puede ajustar (con valores por defecto). */
@@ -92,12 +93,14 @@ export function waitMinutes(db: DB, queue: number): number {
 
 // ---------- Delivery por distancia ----------
 export const DEFAULT_DELIVERY_TIERS = [
-  { upTo: 0.3, price: 3 },
-  { upTo: 0.9, price: 4 },
-  { upTo: 1.5, price: 5 },
-  { upTo: 3, price: 8 },
+  { upTo: 1, price: 3 },
+  { upTo: 2, price: 4 },
+  { upTo: 3, price: 5 },
+  { upTo: 4, price: 7 },
 ];
-export const deliveryTiers = (db: DB) => (db.settings.deliveryTiers?.length ? db.settings.deliveryTiers : DEFAULT_DELIVERY_TIERS).slice().sort((a, b) => a.upTo - b.upTo);
+/** Versión de la tabla de envíos: si la guardada es de una versión anterior, se usa la nueva. */
+export const DELIVERY_TIERS_VERSION = 2;
+export const deliveryTiers = (db: DB) => (db.settings.deliveryTiers?.length && db.settings.deliveryTiersV === DELIVERY_TIERS_VERSION ? db.settings.deliveryTiers : DEFAULT_DELIVERY_TIERS).slice().sort((a, b) => a.upTo - b.upTo);
 export const roadFactor = (db: DB) => db.settings.roadFactor ?? 1.3;
 export const maxDeliveryKm = (db: DB) => Math.max(...deliveryTiers(db).map((t) => t.upTo));
 
@@ -111,8 +114,9 @@ export function straightKm(a: { lat: number; lng: number }, b: { lat: number; ln
 
 /** Distancia aproximada por calles (km) entre el cliente y un local con coordenadas. */
 export function roadKm(db: DB, l: Local, p: { lat: number; lng: number }): number | null {
-  if (l.lat == null || l.lng == null) return null;
-  return Math.round(straightKm({ lat: l.lat, lng: l.lng }, p) * roadFactor(db) * 100) / 100;
+  const g = l.lat != null && l.lng != null ? { lat: l.lat, lng: l.lng } : cachedLocalGeo(l.id, localGeoQueries(l)[0]);
+  if (!g) return null;
+  return Math.round(straightKm(g, p) * roadFactor(db) * 100) / 100;
 }
 
 /** Costo de delivery para una distancia. null = fuera de zona. */
@@ -139,6 +143,12 @@ const LOCAL_GEO_QUERY: Record<string, string> = {
   'l-praderas': 'Av. Las Praderas 250, El Agustino, Lima, Perú',
 };
 export const localGeoQuery = (l: Local) => LOCAL_GEO_QUERY[l.id] ?? `${l.address ?? l.name}, Lima, Perú`;
+/** Búsquedas a probar en orden (si no encuentra el número, busca la calle). */
+const LOCAL_GEO_FALLBACK: Record<string, string[]> = {
+  'l-andahuaylas': ['Ranra Cancha, Santa Anita, Lima, Perú'],
+  'l-praderas': ['Avenida Las Praderas, El Agustino, Lima, Perú'],
+};
+export const localGeoQueries = (l: Local) => [l.address ? `${l.address}, Lima, Perú` : localGeoQuery(l), ...(l.address ? [] : LOCAL_GEO_FALLBACK[l.id] ?? [])];
 
 // ---------- Clientes frecuentes ----------
 export const DEFAULT_LOYALTY = { frequentMin: 5, frequentPct: 0, vipMin: 15, vipPct: 0 };

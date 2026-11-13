@@ -249,8 +249,12 @@ export interface Settings {
   payInfo?: { yape: string; plin: string; webUrl: string };
   /** Costo de delivery por distancia: hasta X km → S/. Más allá del último tramo, fuera de zona. */
   deliveryTiers?: { upTo: number; price: number }[];
+  /** Versión de la tabla de envíos guardada. */
+  deliveryTiersV?: number;
   /** Factor para pasar de distancia en línea recta a distancia por calles (ej. 1.3). */
   roadFactor?: number;
+  /** Personas que reparten (eligen quién maneja al entrar con el usuario de drivers). */
+  drivers?: { id: string; name: string; active: boolean }[];
   /** Clientes frecuentes: desde cuántos pedidos y descuento sugerido (%). */
   loyalty?: { frequentMin: number; frequentPct: number; vipMin: number; vipPct: number };
   msgEnCamino: string;
