@@ -251,12 +251,14 @@ export interface Settings {
   deliveryTiers?: { upTo: number; price: number }[];
   /** Versión de la tabla de envíos guardada. */
   deliveryTiersV?: number;
+  /** Actualizaciones de carta ya aplicadas. */
+  menuUpdates?: string[];
   /** Factor para pasar de distancia en línea recta a distancia por calles (ej. 1.3). */
   roadFactor?: number;
   /** Personas que reparten (eligen quién maneja al entrar con el usuario de drivers). */
   drivers?: { id: string; name: string; active: boolean }[];
   /** Clientes frecuentes: desde cuántos pedidos y descuento sugerido (%). */
-  loyalty?: { frequentMin: number; frequentPct: number; vipMin: number; vipPct: number };
+  loyalty?: { frequentMin: number; vipMin: number; frequentPct?: number; vipPct?: number };
   msgEnCamino: string;
   msgLlegue: string;
 }

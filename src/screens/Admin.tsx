@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { generateDemoSales, mutate, orderTotal, resetAll, uid, useDb, useSession } from '../data/store';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { applyMenuUpdates } from '../data/menuUpdates';
+import { generateDemoSales, getDb, mutate, orderTotal, resetAll, uid, useDb, useSession } from '../data/store';
 import { PAY_LABEL, ROLE_LABEL, type Role, type User } from '../types';
 import { dateTime, money, orderNo } from '../lib/format';
 import { periodRange, PERIOD_LABEL, type Period } from '../lib/reports';
 import { LocalPicker } from '../components/shared';
-import { ConfirmButton, Empty, Modal, TopBar } from '../components/ui';
+import { ConfirmButton, Empty, Modal, TopBar, useTick } from '../components/ui';
 import { WaiterScreen } from './Waiter';
 import { DeliveryScreen } from './Delivery';
 import { KitchenScreen } from './Kitchen';
@@ -18,7 +19,8 @@ import { TicketButton } from '../components/TicketButton';
 import { TicketSettingsCard } from './TicketSettings';
 import { RulesSettings } from './RulesSettings';
 import { localAddress, localClose, localMapsUrl, localOpen } from '../lib/rules';
-import { CLOUD, downloadBackup, fetchSecuritySummary, logoutAllDevices, setStaffPin, signOutDevice, useCloud, type SecuritySummary } from '../data/cloud';
+import { beep } from './Kitchen';
+import { CLOUD, useRequests, downloadBackup, fetchSecuritySummary, logoutAllDevices, setStaffPin, signOutDevice, useCloud, type SecuritySummary } from '../data/cloud';
 
 type Section = 'monitor' | 'drivers' | 'clientes' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
 
@@ -38,6 +40,13 @@ const NAV: { key: Section; label: string; icon: string }[] = [
 
 export function AdminScreen() {
   const [sec, setSec] = useState<Section>('monitor');
+  const cloud = useCloud();
+  // Al entrar el administrador, se agregan a la carta los platos nuevos (ej. combos de lunes a viernes).
+  useEffect(() => {
+    if (cloud.status !== 'ready' && CLOUD) return;
+    const probe = structuredClone(getDb());
+    if (applyMenuUpdates(probe)) mutate((d) => { applyMenuUpdates(d); });
+  }, [cloud.status]);
   return (
     <div className="admin">
       <TopBar />
@@ -48,6 +57,7 @@ export function AdminScreen() {
           </button>
         ))}
       </nav>
+      <AdminAlerts go={setSec} />
       <main>
         {sec === 'monitor' && <OrderLog admin />}
         {sec === 'drivers' && <DriversPanel showMoney />}
@@ -257,7 +267,7 @@ function SettingsScreen() {
         <div className="card">
           <h3>Este celular</h3>
           <p className="muted small">Conectado a la base de datos de La Tata Food. Los pedidos se comparten en tiempo real con todos los celulares del personal.</p>
-          <button className="btn" onClick={() => { setDone('Preparando respaldo…'); void downloadBackup(db).then((n) => setDone(`Respaldo descargado: ${n} pedidos, carta y usuarios (sin códigos). Guárdalo en tu Google Drive o correo.`)); }}>⬇ Descargar respaldo completo</button>
+          <button className="btn" onClick={() => { setDone('Preparando respaldo…'); void downloadBackup(db).then((n) => { markBackup(); setDone(`Respaldo descargado: ${n} pedidos, carta y usuarios (sin códigos). Guárdalo en tu Google Drive o correo.`); }); }}>⬇ Descargar respaldo completo</button>
           {done && <p className="notice">{done}</p>}
           <ConfirmButton label="Desconectar este celular" title="Desconectar este celular" message="Para volver a usar la app en este celular habrá que escribir la clave del local." confirmLabel="Desconectar" onConfirm={() => { void signOutDevice(); }} />
         </div>
@@ -318,6 +328,43 @@ function DriversEditor() {
       ))}
       <button className="btn ghost small" onClick={() => save([...list, { id: uid('drv'), name: 'Nuevo driver', active: true }])}>+ Agregar driver</button>
       <p className="muted small">Usuario de ingreso de drivers: {loginUsers.length ? loginUsers.map((u) => u.name).join(', ') : 'ninguno: crea un usuario con función "Driver"'}. Si quieres un solo código para todos, deja activo solo uno de esos usuarios.</p>
+    </div>
+  );
+}
+
+const BACKUP_KEY = 'latatafood-ultimo-respaldo';
+const lastBackup = () => { try { return Number(localStorage.getItem(BACKUP_KEY)) || 0; } catch { return 0; } };
+const markBackup = () => { try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch { /* sin espacio */ } };
+
+/** Avisos para el administrador: pedidos web sin confirmar y respaldo semanal. */
+function AdminAlerts({ go }: { go: (s: Section) => void }) {
+  const db = useDb();
+  useTick(30000);
+  const requests = useRequests();
+  const late = requests.filter((r) => r.status === 'pendiente' && Date.now() - new Date(r.created_at).getTime() > 5 * 60000);
+  const [backupAt, setBackupAt] = useState(lastBackup);
+  const [busy, setBusy] = useState(false);
+  const prevLate = useRef(0);
+  useEffect(() => {
+    if (late.length > prevLate.current) beep();
+    prevLate.current = late.length;
+  }, [late.length]);
+  const backupDue = CLOUD && Date.now() - backupAt > 7 * 86400000;
+  if (!late.length && !backupDue) return null;
+  return (
+    <div className="admin-alerts">
+      {late.length > 0 && (
+        <div className="alert-bar warn" role="alert">
+          <span>⏰ <b>{late.length} pedido{late.length > 1 ? 's' : ''} web</b> esperando confirmación hace más de 5 min. Solo el mozo delivery puede confirmarlo: avísale.</span>
+          <button className="btn small" onClick={() => go('delivery')}>Ver</button>
+        </div>
+      )}
+      {backupDue && (
+        <div className="alert-bar" role="status">
+          <span>💾 {backupAt ? 'Hace más de 7 días que no descargas' : 'Aún no descargas'} un respaldo de pedidos, carta y usuarios.</span>
+          <button className="btn small" disabled={busy} onClick={() => { setBusy(true); void downloadBackup(db).then(() => { markBackup(); setBackupAt(Date.now()); setBusy(false); }); }}>{busy ? 'Preparando…' : 'Descargar ahora'}</button>
+        </div>
+      )}
     </div>
   );
 }

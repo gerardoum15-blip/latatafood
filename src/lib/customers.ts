@@ -16,7 +16,6 @@ export interface CustomerProfile {
   last: number;
   addresses: SavedAddress[];
   tier: 'nuevo' | 'frecuente' | 'vip';
-  suggestedPct: number;
 }
 
 /** Arma la ficha de cada cliente a partir de sus pedidos (no guarda nada aparte). */
@@ -27,7 +26,7 @@ export function buildCustomers(db: DB): Map<string, CustomerProfile> {
   for (const o of sorted) {
     const id = phoneId(o.customer?.phone);
     if (id.length < 9 || o.cancelled) continue;
-    const c = map.get(id) ?? { phone: id, name: '', orders: 0, spent: 0, first: o.createdAt, last: o.createdAt, addresses: [], tier: 'nuevo' as const, suggestedPct: 0 };
+    const c = map.get(id) ?? { phone: id, name: '', orders: 0, spent: 0, first: o.createdAt, last: o.createdAt, addresses: [], tier: 'nuevo' as const };
     c.name = o.customer!.name || c.name; // el nombre más reciente
     c.last = o.createdAt;
     if (o.closed) { c.orders++; c.spent += orderTotal(o); }
@@ -49,7 +48,6 @@ export function buildCustomers(db: DB): Map<string, CustomerProfile> {
   for (const c of map.values()) {
     c.addresses.sort((a, b) => b.uses - a.uses || b.last - a.last);
     c.tier = c.orders >= L.vipMin ? 'vip' : c.orders >= L.frequentMin ? 'frecuente' : 'nuevo';
-    c.suggestedPct = c.tier === 'vip' ? L.vipPct : c.tier === 'frecuente' ? L.frequentPct : 0;
   }
   return map;
 }

@@ -9,7 +9,7 @@ import { CLOUD, submitOrderRequest, useKitchenQueue, type WebOrder } from '../da
 import { OrderTracker, rememberTracking, useTracking } from './OrderTracker';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
-import { useLocalGeo } from '../lib/useLocalGeo';
+import { useAddressGeo, useLocalGeo } from '../lib/useLocalGeo';
 import { deliveryFeeFor, hoursLabel, kmLabel, localAddress, localMapsUrl, maxDeliveryKm, nearestLocal, payInfo, suggestPackaging, waitMinutes } from '../lib/rules';
 import logo from '../assets/logo.webp';
 
@@ -103,7 +103,10 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const pkg = mode === 'mesa' ? { qty: 0, amount: 0 } : suggestPackaging(cart, db);
   // Delivery: costo según la distancia al local más cercano (si los locales están ubicados).
   useLocalGeo(db);
-  const near = mode === 'delivery' && loc ? nearestLocal(db, loc) : null;
+  // Sin GPS: se ubica la dirección escrita (aproximado).
+  const addrGeo = useAddressGeo(address, mode === 'delivery' && !loc);
+  const point = loc ?? addrGeo;
+  const near = mode === 'delivery' && point ? nearestLocal(db, point) : null;
   const fee = near ? deliveryFeeFor(db, near.km) : null;
   const outOfZone = !!near && fee === null;
   const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkg.amount + (mode === 'delivery' && fee ? fee : 0);
@@ -280,7 +283,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
                   <span className="muted small">Guardar como:</span>
                   {['Casa', 'Oficina', 'Otra'].map((l) => <button key={l} role="radio" aria-checked={addrLabel === l} className={addrLabel === l ? 'seg active' : 'seg'} onClick={() => setAddrLabel(l)}>{l}</button>)}
                 </div>
-                {near && fee != null && <p className="small fee-note">🛵 Delivery: <b>{money(fee)}</b> · aprox. {kmLabel(near.km)} · te atiende <b>{near.local.name}</b> (el más cercano)</p>}
+                {near && fee != null && <p className="small fee-note">🛵 Delivery: <b>{money(fee)}</b> · aprox. {kmLabel(near.km)} · te atiende <b>{near.local.name}</b> (el más cercano){!loc && ' · calculado por la dirección escrita; con tu ubicación es más exacto'}</p>}
                 <label className="field"><span>Dirección de envío</span><input id="c-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, referencia" /><span className="muted small">Revisa y agrega referencias (piso, color de puerta…).</span></label>
                 {pkg.amount > 0 && <p className="muted small">Empaques: {pkg.qty} {pkg.qty === 1 ? 'táper' : 'táperes'} = {money(pkg.amount)}</p>}
               </>

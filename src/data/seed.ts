@@ -1,3 +1,4 @@
+import { COMBO_SODA_GROUP, WEEKDAY_COMBOS } from './menuUpdates';
 import type { DB, ModifierGroup, Product } from '../types';
 
 const opt = (id: string, name: string, price = 0) => ({ id, name, price });
@@ -128,6 +129,7 @@ export function createSeed(): DB {
     version: 2,
     settings: {
       businessName: 'La Tata Food',
+      menuUpdates: ['combos-lv'],
       whatsapp: '955093657',
       packagingPrice: 0.5,
       msgEnCamino: 'Hola {cliente}, soy {driver} de {negocio}. Ya tengo tu pedido, estoy en camino a tu dirección.',
@@ -138,14 +140,14 @@ export function createSeed(): DB {
       { id: 'l-praderas', name: 'Local Las Praderas', tables: 10 },
     ],
     users: [
-      { id: 'u-admin', name: 'Administrador', role: 'admin', pin: '1234', localId: null, active: true },
-      { id: 'u-coc-and', name: 'Cocina Andahuaylas', role: 'cocina', pin: '1111', localId: 'l-andahuaylas', active: true },
-      { id: 'u-coc-pra', name: 'Cocina Las Praderas', role: 'cocina', pin: '2222', localId: 'l-praderas', active: true },
-      { id: 'u-mozo1', name: 'Mozo de mesa', role: 'mozo', pin: '3333', localId: null, active: true },
-      { id: 'u-deliv1', name: 'Mozo delivery', role: 'delivery', pin: '4444', localId: null, active: true },
-      { id: 'u-driver1', name: 'Carlos Chunga', role: 'driver', pin: '5551', localId: null, active: true },
-      { id: 'u-driver2', name: 'Dario Tesen', role: 'driver', pin: '5552', localId: null, active: true },
-      { id: 'u-driver3', name: 'Arturo Urbina', role: 'driver', pin: '5553', localId: null, active: true },
+      { id: 'u-admin', name: 'Administrador', role: 'admin', pin: '', localId: null, active: true },
+      { id: 'u-coc-and', name: 'Cocina Andahuaylas', role: 'cocina', pin: '', localId: 'l-andahuaylas', active: true },
+      { id: 'u-coc-pra', name: 'Cocina Las Praderas', role: 'cocina', pin: '', localId: 'l-praderas', active: true },
+      { id: 'u-mozo1', name: 'Mozo de mesa', role: 'mozo', pin: '', localId: null, active: true },
+      { id: 'u-deliv1', name: 'Mozo delivery', role: 'delivery', pin: '', localId: null, active: true },
+      { id: 'u-driver1', name: 'Carlos Chunga', role: 'driver', pin: '', localId: null, active: true },
+      { id: 'u-driver2', name: 'Dario Tesen', role: 'driver', pin: '', localId: null, active: true },
+      { id: 'u-driver3', name: 'Arturo Urbina', role: 'driver', pin: '', localId: null, active: true },
     ],
     categories: [
       { id: 'c-hamb', name: 'Hamburguesas', order: 1 },
@@ -158,8 +160,8 @@ export function createSeed(): DB {
       { id: 'c-combos', name: 'Combos y promociones', order: 8 },
       { id: 'c-adicionales', name: 'Adicionales', order: 9, packaging: false },
     ],
-    groups,
-    products,
+    groups: [...groups, structuredClone(COMBO_SODA_GROUP)],
+    products: [...products, ...structuredClone(WEEKDAY_COMBOS)],
     orders: [],
     counters: {},
   };

@@ -508,3 +508,7 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .reassign select { width: auto; min-height: 36px; }
 .track-news { background: #fff4d6; border: 1px solid #f0c040; color: #5a3d00; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
 .notify-btn { align-self: flex-start; }
+.admin-alerts { display: grid; gap: 6px; padding: 8px 12px 0; }
+.alert-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #eef3ff; border: 1px solid #b9c8f0; border-radius: 10px; padding: 8px 12px; font-size: .9rem; }
+.alert-bar.warn { background: #fff4d6; border-color: #f0c040; color: #5a3d00; }
+.alert-bar .btn { flex: none; }

@@ -114,7 +114,7 @@ export function straightKm(a: { lat: number; lng: number }, b: { lat: number; ln
 
 /** Distancia aproximada por calles (km) entre el cliente y un local con coordenadas. */
 export function roadKm(db: DB, l: Local, p: { lat: number; lng: number }): number | null {
-  const g = l.lat != null && l.lng != null ? { lat: l.lat, lng: l.lng } : cachedLocalGeo(l.id, localGeoQueries(l)[0]);
+  const g = localCoords(l);
   if (!g) return null;
   return Math.round(straightKm(g, p) * roadFactor(db) * 100) / 100;
 }
@@ -137,6 +137,16 @@ export function nearestLocal(db: DB, p: { lat: number; lng: number }): { local: 
 
 export const kmLabel = (km: number) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`);
 
+/** Ubicación exacta de cada local (de sus Plus Codes de Google Maps). */
+const LOCAL_COORDS: Record<string, { lat: number; lng: number }> = {
+  'l-andahuaylas': { lat: -12.0385625, lng: -76.9640625 }, // X26P+H9 Santa Anita
+  'l-praderas': { lat: -12.0286875, lng: -76.9631875 }, // X2CP+GP El Agustino
+};
+/** Coordenadas del local: las fijas, las guardadas o las encontradas por su dirección. */
+export function localCoords(l: Local): { lat: number; lng: number } | null {
+  return LOCAL_COORDS[l.id] ?? (l.lat != null && l.lng != null ? { lat: l.lat, lng: l.lng } : cachedLocalGeo(l.id, localGeoQueries(l)[0]) ?? null);
+}
+
 /** Dirección para buscar cada local en el mapa (la primera vez). */
 const LOCAL_GEO_QUERY: Record<string, string> = {
   'l-andahuaylas': 'Ranra Cancha 545, Santa Anita, Lima, Perú',
@@ -151,5 +161,5 @@ const LOCAL_GEO_FALLBACK: Record<string, string[]> = {
 export const localGeoQueries = (l: Local) => [l.address ? `${l.address}, Lima, Perú` : localGeoQuery(l), ...(l.address ? [] : LOCAL_GEO_FALLBACK[l.id] ?? [])];
 
 // ---------- Clientes frecuentes ----------
-export const DEFAULT_LOYALTY = { frequentMin: 5, frequentPct: 0, vipMin: 15, vipPct: 0 };
+export const DEFAULT_LOYALTY = { frequentMin: 5, vipMin: 15 };
 export const loyalty = (db: DB) => ({ ...DEFAULT_LOYALTY, ...(db.settings.loyalty ?? {}) });

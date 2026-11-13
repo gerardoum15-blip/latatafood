@@ -8,7 +8,7 @@ import { CLOUD, resolveRequest, useRequests, type OrderRequest } from '../data/c
 import { beep } from './Kitchen';
 import { driverName } from '../lib/drivers';
 import { buildCustomers, phoneId, TIER_LABEL } from '../lib/customers';
-import { useLocalGeo } from '../lib/useLocalGeo';
+import { useAddressGeo, useLocalGeo } from '../lib/useLocalGeo';
 import { deliveryFeeFor, kmLabel, maxDeliveryKm, nearestLocal, roadKm } from '../lib/rules';
 import { LocalPicker } from '../components/shared';
 import { NewItems, type InitialOrder } from './Waiter';
@@ -97,7 +97,10 @@ export function DeliveryScreen() {
   const profile = phoneId(customer.phone).length === 9 ? customers.get(phoneId(customer.phone)) : undefined;
 
   // Costo de delivery sugerido por distancia (si hay ubicación del cliente y del local).
-  const point = customer.lat != null && customer.lng != null ? { lat: customer.lat, lng: customer.lng } : null;
+  const exact = customer.lat != null && customer.lng != null ? { lat: customer.lat, lng: customer.lng } : null;
+  // Sin ubicación del cliente: se calcula por la dirección escrita (aproximado).
+  const addrGeo = useAddressGeo(customer.address, !exact && !dineIn && !pickup);
+  const point = exact ?? addrGeo;
   const km = point && local ? roadKm(db, local, point) : null;
   useLocalGeo(db);
   const near = point ? nearestLocal(db, point) : null;
@@ -263,8 +266,8 @@ export function DeliveryScreen() {
             <label className="field"><span>Costo de delivery (S/)</span>
               <input id="d-fee" type="number" inputMode="decimal" step="0.5" value={feeManual ?? (suggestedFee ?? '')} placeholder="Según distancia" onChange={(e) => setFeeManual(e.target.value)} />
               <span className="muted small">
-                {km != null ? (suggestedFee != null ? `Sugerido ${money(suggestedFee)} · aprox. ${kmLabel(km)} de ${local?.name}` : `Fuera de zona: aprox. ${kmLabel(km)} (más de ${maxDeliveryKm(db)} km)`)
-                  : point ? 'Ubica los locales en Ajustes para calcularlo solo.' : 'Sin ubicación del cliente: escríbelo a mano.'}
+                {km != null ? (suggestedFee != null ? `Sugerido ${money(suggestedFee)} · aprox. ${kmLabel(km)} de ${local?.name}${exact ? '' : ' (por la dirección escrita: revísalo)'}` : `Fuera de zona: aprox. ${kmLabel(km)} (más de ${maxDeliveryKm(db)} km)`)
+                  : point ? 'Elige el local para calcularlo.' : 'Sin ubicación del cliente: escribe la dirección o pídele su ubicación.'}
                 {near && local && near.local.id !== local.id ? ` · Más cerca: ${near.local.name} (${kmLabel(near.km)})` : ''}
                 {feeManual !== null && suggestedFee != null && <> · <button className="link small" onClick={() => setFeeManual(null)}>usar sugerido</button></>}
               </span>
