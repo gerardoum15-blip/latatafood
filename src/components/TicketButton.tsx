@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDb } from '../data/store';
 import type { Order } from '../types';
-import { renderTicket } from '../lib/ticket';
+import { renderTicket, type TicketOptions } from '../lib/ticket';
 import { Modal } from './ui';
 
 /** Botón que genera el ticket como imagen PNG y permite compartirlo (WhatsApp) o descargarlo. */
@@ -15,7 +15,9 @@ export function TicketButton({ order, className = 'btn small', label = '🧾 Tic
   );
 }
 
-export function TicketPreview({ order, onClose }: { order: Order; onClose: () => void }) {
+export function TicketPreview({ order, onClose, options, shareText, title, children }: {
+  order: Order; onClose: () => void; options?: TicketOptions; shareText?: string; title?: string; children?: import('react').ReactNode;
+}) {
   const db = useDb();
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState('');
@@ -24,7 +26,7 @@ export function TicketPreview({ order, onClose }: { order: Order; onClose: () =>
   useEffect(() => {
     let alive = true;
     let made = '';
-    renderTicket(order, db)
+    renderTicket(order, db, options)
       .then((blob) => {
         if (!alive) return;
         const f = new File([blob], `ticket-${order.number || 'pedido'}.png`, { type: 'image/png' });
@@ -41,16 +43,17 @@ export function TicketPreview({ order, onClose }: { order: Order; onClose: () =>
   const canShare = !!file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
 
   return (
-    <Modal title={`Ticket ${order.number ? `#${order.number}` : ''}`} onClose={onClose} footer={
+    <Modal title={title ?? `Ticket ${order.number ? `#${order.number}` : ''}`} onClose={onClose} footer={
       <div className="row gap">
         {url && <a className="btn grow" href={url} download={file?.name}>Descargar</a>}
         {canShare && (
-          <button className="btn wa grow" onClick={() => { void navigator.share({ files: [file!], title: `Ticket ${order.number}` }).catch(() => undefined); }}>
+          <button className="btn wa grow" onClick={() => { void navigator.share({ files: [file!], title: `Ticket ${order.number}`, ...(shareText ? { text: shareText } : {}) }).catch(() => undefined); }}>
             Compartir (WhatsApp)
           </button>
         )}
       </div>
     }>
+      {children}
       {err && <p className="err-text">{err}</p>}
       {!url && !err && <p className="muted">Generando ticket…</p>}
       {url && <img className="ticket-img" src={url} alt={`Ticket del pedido ${order.number}`} />}

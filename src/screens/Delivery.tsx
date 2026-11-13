@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { addItems, createOrder, nextDriver, orderTotal, setOrderDiscount, useDb, useSession } from '../data/store';
-import { PAY_LABEL, type Customer, type PayMethod } from '../types';
+import { PAY_LABEL, type Customer, type Order, type PayMethod } from '../types';
 import { money, orderNo } from '../lib/format';
 import { isUrl, trackUrl, waLink } from '../lib/whatsapp';
 import { dateShort, minutesAgo } from '../lib/format';
@@ -13,7 +13,7 @@ import { deliveryFeeFor, kmLabel, maxDeliveryKm, nearestLocal, payInfo, roadKm }
 import { LocalPicker } from '../components/shared';
 import { NewItems, type Draft, type InitialOrder } from './Waiter';
 import { Modal } from '../components/ui';
-import { TicketButton } from '../components/TicketButton';
+import { TicketButton, TicketPreview } from '../components/TicketButton';
 import { parseOrderMessage, webOrderToParsed, type ParsedOrder } from '../lib/parseOrder';
 
 const EMPTY: Customer = { name: '', phone: '', address: '', reference: '', mapsUrl: '' };
@@ -293,7 +293,7 @@ export function DeliveryScreen() {
         </>
       }
       packaging={!dineIn}
-      beforeSend={needsConfirm ? (d) => <ConfirmStep draft={d} fee={pickup || indrive ? 0 : fee} pickup={pickup} indrive={indrive} customer={customer} pay={pay} cashWith={cashWith}
+      beforeSend={needsConfirm ? (d) => <ConfirmStep localId={localId} draft={d} fee={pickup || indrive ? 0 : fee} pickup={pickup} indrive={indrive} customer={customer} pay={pay} cashWith={cashWith}
         confirmedSig={confirmedSig} onConfirm={setConfirmedSig} /> : undefined}
       onSend={(items, note, pkg, discount) => {
         const c = { ...customer, name: customer.name.trim(), phone: customer.phone.trim(), address: customer.address.trim(), mapsUrl: customer.mapsUrl.trim() };
@@ -319,8 +319,8 @@ export function DeliveryScreen() {
 }
 
 /** Antes de cocina: el mozo delivery manda el resumen al cliente, cobra y marca que confirmó. */
-function ConfirmStep({ draft, fee, pickup, indrive, customer, pay, cashWith, confirmedSig, onConfirm }: {
-  draft: Draft; fee: number; pickup: boolean; indrive: boolean; customer: Customer; pay: PayMethod; cashWith: string;
+function ConfirmStep({ localId, draft, fee, pickup, indrive, customer, pay, cashWith, confirmedSig, onConfirm }: {
+  localId: string; draft: Draft; fee: number; pickup: boolean; indrive: boolean; customer: Customer; pay: PayMethod; cashWith: string;
   confirmedSig: string | null; onConfirm: (sig: string | null) => void;
 }) {
   const db = useDb();
@@ -353,13 +353,32 @@ function ConfirmStep({ draft, fee, pickup, indrive, customer, pay, cashWith, con
   else L.push(`Pago: ${PAY_LABEL[pay]}.`);
   L.push('Responde *OK* y lo mandamos a cocina.');
   const ok = confirmedSig === sig;
+  const [showTicket, setShowTicket] = useState(false);
+  // Pedido tal como quedaría, para dibujar el ticket "por confirmar".
+  const draftOrder: Order = {
+    id: 'borrador', number: 0, localId, channel: 'delivery', table: null,
+    customer: { ...customer, reference: customer.reference ?? '' }, deliveryFee: fee,
+    packagingQty: draft.pkg.qty, packagingAmount: draft.pkg.amount,
+    discount: draft.discount ? { amount: draft.discount, reason: 'Descuento' } : undefined,
+    selfDelivery: pickup ? 'recojo' : indrive ? 'indrive' : undefined,
+    plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null,
+    items: draft.items, note: draft.note, kitchenStatus: 'enviado', deliveryStatus: null, served: false, closed: false, cancelled: false,
+    payments: [], createdAt: Date.now(), createdBy: '', createdByName: '', sentAt: 0, readyAt: null, closedAt: null, history: [], sunat: { status: 'no_emitido', type: null },
+  };
+  const shareText = `Hola${customer.name ? ` ${customer.name.split(' ')[0]}` : ''}, este es tu pedido en ${db.settings.businessName}. Total a pagar: ${money(total)}. ${L[L.length - 2]} Responde OK y lo mandamos a cocina.`;
   return (
     <div className={ok ? 'card confirm-step ok' : 'card confirm-step'}>
       <b>Confirmar con el cliente y cobrar</b>
       <p className="small muted">Mándale el resumen. Puedes cambiar el pedido hasta enviarlo a cocina; si cambias algo, vuelve a mandarlo.</p>
       {changed && <p className="err-text small">Cambiaste el pedido: vuelve a enviarle el resumen.</p>}
-      <a className="btn wa block" target="_blank" rel="noreferrer" aria-disabled={!customer.phone.trim()}
-        href={customer.phone.trim() ? waLink(customer.phone, L.join('\n')) : undefined}>📲 Enviar resumen al cliente ({money(total)})</a>
+      <button className="btn wa block" onClick={() => setShowTicket(true)}>🧾 Enviar ticket al cliente ({money(total)})</button>
+      <a className="link small" target="_blank" rel="noreferrer" href={customer.phone.trim() ? waLink(customer.phone, L.join('\n')) : undefined}>o enviarlo como texto</a>
+      {showTicket && (
+        <TicketPreview order={draftOrder} title="Ticket para confirmar" options={{ heading: 'POR CONFIRMAR' }} shareText={shareText} onClose={() => setShowTicket(false)}>
+          <p className="small muted">Toca <b>Compartir (WhatsApp)</b> y elige el chat de {customer.name || 'el cliente'}. Cuando confirme y pague, marca la casilla y envía a cocina: cocina y el driver verán este mismo ticket.</p>
+          {customer.phone.trim() && <a className="btn small ghost" target="_blank" rel="noreferrer" href={waLink(customer.phone)}>Abrir chat de {customer.phone}</a>}
+        </TicketPreview>
+      )}
       <label className="check"><input id="pay-ok" type="checkbox" checked={ok} onChange={(e) => onConfirm(e.target.checked ? sig : null)} />
         {' '}El cliente confirmó y {pay === 'efectivo' ? 'sé con cuánto paga' : 'ya pagó (captura recibida)'}</label>
     </div>

@@ -5,6 +5,7 @@ import { minutesAgo, time, orderNo } from '../lib/format';
 import { LocalPicker, useWorkLocal } from '../components/shared';
 import { driverName } from '../lib/drivers';
 import { Empty, ItemLines, useTick } from '../components/ui';
+import { TicketButton } from '../components/TicketButton';
 
 const NEXT: Record<KitchenStatus, { to: KitchenStatus; label: string } | null> = {
   enviado: { to: 'preparando', label: 'Recibido · En preparación' },
@@ -108,6 +109,7 @@ function KitchenTicket({ order }: { order: Order }) {
       {lastRound > 1 && order.kitchenStatus !== 'listo' && <div className="round-tag">Ronda {lastRound} (agregado)</div>}
       <ItemLines items={items} big showPrices={false} />
       {order.note && <div className="item-note">📝 {order.note}</div>}
+      {order.channel === 'delivery' && <TicketButton order={order} className="btn small ghost" label="🧾 Ver ticket" />}
       {next && <button className={`btn block k-btn-${next.to}`} onClick={() => setKitchenStatus(order.id, next.to, user)}>{next.label}</button>}
     </article>
   );

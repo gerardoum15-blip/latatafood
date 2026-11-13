@@ -1,3 +1,5 @@
+import { payInfo } from './rules';
+import { driverName } from './drivers';
 import type { DB, Order, TicketSettings } from '../types';
 import { PAY_LABEL } from '../types';
 import { discountTotal, lineTotal, orderTotal, packagingTotal } from '../data/store';
@@ -49,7 +51,9 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, width: number): strin
 interface Row { qty: string; name: string; sub: string[]; price: string }
 
 /** Dibuja el ticket. Primero mide (draw=false) para saber el alto, luego dibuja. */
-async function paint(order: Order, db: DB, t: TicketSettings, logo: HTMLImageElement | null, ctx: CanvasRenderingContext2D, draw: boolean): Promise<number> {
+export interface TicketOptions { heading?: string; info?: string[] }
+
+async function paint(order: Order, db: DB, t: TicketSettings, logo: HTMLImageElement | null, ctx: CanvasRenderingContext2D, draw: boolean, opt: TicketOptions = {}): Promise<number> {
   const local = db.locales.find((l) => l.id === order.localId);
   const set = (size: number, weight = 400, color = C.ink) => { ctx.font = `${weight} ${size}px ${FONT}`; ctx.fillStyle = color; };
   const text = (s: string, x: number, y: number, align: CanvasTextAlign = 'left') => { if (draw) { ctx.textAlign = align; ctx.fillText(s, x, y); } };
@@ -65,7 +69,7 @@ async function paint(order: Order, db: DB, t: TicketSettings, logo: HTMLImageEle
     ctx.drawImage(logo, PAD, y, logoSize, logoSize);
     ctx.restore();
   }
-  set(38, 800, C.heavy); text(`RECIBO#${order.number || '—'}`, W - PAD, y + 40, 'right');
+  set(38, 800, C.heavy); text(opt.heading ?? `RECIBO#${order.number || '—'}`, W - PAD, y + 40, 'right');
   set(22, 400, C.muted); if (local) text(local.name, W - PAD, y + 74, 'right');
   y += (logo ? logoSize : 60) + 36;
 
@@ -75,6 +79,20 @@ async function paint(order: Order, db: DB, t: TicketSettings, logo: HTMLImageEle
   set(22, 400, C.ink);
   for (const l of wrap(ctx, t.header, W - PAD * 2)) { text(l, PAD, y + 22); y += 30; }
   y += 34;
+
+  // Datos del cliente, entrega y pago (cliente, cocina y driver ven lo mismo)
+  const info = opt.info ?? ticketInfo(order, db);
+  if (info.length) {
+    rule(y, 3, C.heavy); y += 18;
+    for (const line of info) {
+      const [k, ...rest] = line.split(': ');
+      const v = rest.join(': ');
+      set(22, 700, C.ink);
+      const lines = v ? wrap(ctx, `${k}: ${v}`, W - PAD * 2) : wrap(ctx, k, W - PAD * 2);
+      lines.forEach((l, i) => { set(22, i === 0 && v ? 700 : 400, C.ink); text(l, PAD, y + 22); y += 30; });
+    }
+    y += 16;
+  }
 
   // Filas del pedido
   const rows: Row[] = order.items.map((it) => ({
@@ -147,18 +165,18 @@ async function paint(order: Order, db: DB, t: TicketSettings, logo: HTMLImageEle
 }
 
 /** Genera el ticket del pedido como imagen PNG. */
-export async function renderTicket(order: Order, db: DB): Promise<Blob> {
+export async function renderTicket(order: Order, db: DB, opt: TicketOptions = {}): Promise<Blob> {
   const t = ticketSettings(db);
   const logo = await loadImage(t.logo || defaultLogo);
   const measure = document.createElement('canvas').getContext('2d')!;
-  const height = await paint(order, db, t, logo, measure, false);
+  const height = await paint(order, db, t, logo, measure, false, opt);
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = Math.ceil(height);
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await paint(order, db, t, logo, ctx, true);
+  await paint(order, db, t, logo, ctx, true, opt);
   return new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('No se pudo crear la imagen'))), 'image/png'));
 }
 
@@ -177,4 +195,28 @@ export async function shrinkImage(file: File, size = 240): Promise<string> {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/** Datos de entrega y pago que van en el ticket (delivery, recojo o InDrive). */
+export function ticketInfo(order: Order, db: DB): string[] {
+  if (order.channel !== 'delivery' || !order.customer) return [];
+  const c = order.customer;
+  const L: string[] = [];
+  L.push(`Cliente: ${c.name}`);
+  if (c.phone) L.push(`WhatsApp: ${c.phone}`);
+  if (order.selfDelivery === 'recojo') L.push('Entrega: recojo en local');
+  else {
+    if (order.selfDelivery === 'indrive') L.push('Entrega: por InDrive');
+    if (c.address) L.push(`Dirección: ${c.address}`);
+    if (c.reference) L.push(`Referencia: ${c.reference}`);
+  }
+  const pi = payInfo(db);
+  const pay = order.plannedPay;
+  if (pay === 'yape') L.push(`Pago: Yape al ${pi.yape}`);
+  else if (pay === 'plin') L.push(`Pago: Plin al ${pi.plin}`);
+  else if (pay === 'efectivo') L.push(`Pago: efectivo${order.cashWith ? ` (paga con ${sol(order.cashWith)})` : ''}`);
+  else if (pay) L.push(`Pago: ${PAY_LABEL[pay]}`);
+  if (order.driverId) { const n = driverName(db, order.driverId); if (n) L.push(`Driver: ${n}`); }
+  if (order.note) L.push(`Nota: ${order.note}`);
+  return L;
 }
