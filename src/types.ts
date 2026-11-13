@@ -19,6 +19,9 @@ export interface Local {
   /** Horario de atención (hora de Lima, "HH:MM"). */
   open?: string;
   close?: string;
+  /** Coordenadas del local (para calcular el costo de delivery). */
+  lat?: number;
+  lng?: number;
 }
 
 export interface User {
@@ -166,6 +169,11 @@ export interface Customer {
   address: string;
   reference: string;
   mapsUrl: string;
+  /** Ubicación exacta (si el cliente la marcó en el mapa). */
+  lat?: number | null;
+  lng?: number | null;
+  /** Casa, Oficina… */
+  label?: string;
 }
 
 export interface StatusEvent {
@@ -237,6 +245,12 @@ export interface Settings {
   waitTiers?: { min: number; minutes: number }[];
   /** Datos de pago que ve el cliente. */
   payInfo?: { yape: string; plin: string; webUrl: string };
+  /** Costo de delivery por distancia: hasta X km → S/. Más allá del último tramo, fuera de zona. */
+  deliveryTiers?: { upTo: number; price: number }[];
+  /** Factor para pasar de distancia en línea recta a distancia por calles (ej. 1.3). */
+  roadFactor?: number;
+  /** Clientes frecuentes: desde cuántos pedidos y descuento sugerido (%). */
+  loyalty?: { frequentMin: number; frequentPct: number; vipMin: number; vipPct: number };
   msgEnCamino: string;
   msgLlegue: string;
 }

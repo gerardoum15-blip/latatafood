@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { generateDemoSales, mutate, orderTotal, resetAll, uid, useDb, useSession } from '../data/store';
 import { PAY_LABEL, ROLE_LABEL, type Role, type User } from '../types';
 import { dateTime, money, orderNo } from '../lib/format';
@@ -12,17 +12,20 @@ import { ReportsScreen } from './Reports';
 import { MenuAdmin } from './MenuAdmin';
 import { OrderLog } from './OrderLog';
 import { DriversPanel } from './DriversPanel';
+import { CustomersScreen } from './Customers';
+import { LocalLocatorButton } from '../components/LocalLocator';
 import { TicketButton } from '../components/TicketButton';
 import { TicketSettingsCard } from './TicketSettings';
 import { RulesSettings } from './RulesSettings';
 import { localAddress, localClose, localMapsUrl, localOpen } from '../lib/rules';
-import { CLOUD, setStaffPin, signOutDevice, useCloud } from '../data/cloud';
+import { CLOUD, downloadBackup, fetchSecuritySummary, logoutAllDevices, setStaffPin, signOutDevice, useCloud, type SecuritySummary } from '../data/cloud';
 
-type Section = 'monitor' | 'drivers' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
+type Section = 'monitor' | 'drivers' | 'clientes' | 'salon' | 'delivery' | 'cocina' | 'reportes' | 'tickets' | 'carta' | 'usuarios' | 'ajustes';
 
 const NAV: { key: Section; label: string; icon: string }[] = [
   { key: 'monitor', label: 'Pedidos', icon: '📋' },
   { key: 'drivers', label: 'Drivers', icon: '📍' },
+  { key: 'clientes', label: 'Clientes', icon: '⭐' },
   { key: 'salon', label: 'Salón', icon: '🍽' },
   { key: 'delivery', label: 'Delivery', icon: '🛵' },
   { key: 'cocina', label: 'Cocina', icon: '👨‍🍳' },
@@ -48,6 +51,7 @@ export function AdminScreen() {
       <main>
         {sec === 'monitor' && <OrderLog admin />}
         {sec === 'drivers' && <DriversPanel showMoney />}
+        {sec === 'clientes' && <CustomersScreen />}
         {sec === 'salon' && <WaiterScreen />}
         {sec === 'delivery' && <DeliveryScreen />}
         {sec === 'cocina' && <KitchenScreen />}
@@ -148,6 +152,7 @@ function Users() {
           </div>
         );
       })}
+      {CLOUD && <SecurityCard />}
       {edit && <UserForm initial={edit} isSelf={edit.id === me.id} onClose={() => setEdit(null)} />}
     </div>
   );
@@ -166,7 +171,8 @@ function UserForm({ initial, isSelf, onClose }: { initial: User; isSelf: boolean
     if (u.role === 'cocina' && !u.localId) return setErr('Cocina debe tener un local asignado.');
     if (server) {
       // PIN cifrado en el servidor: vacío = no cambiar (obligatorio solo para usuarios nuevos).
-      if (u.pin && !/^\d{4,6}$/.test(u.pin)) return setErr('El PIN debe tener de 4 a 6 números.');
+      if (u.pin && !/^\d{4,6}$/.test(u.pin)) return setErr('El código debe tener de 4 a 6 números.');
+      if (u.pin && u.role === 'admin' && u.pin.length < 6) return setErr('El código del Administrador debe tener 6 números.');
       if (isNew && !u.pin) return setErr('Escribe un PIN para el nuevo usuario.');
     } else {
       if (!/^\d{4,6}$/.test(u.pin)) return setErr('El PIN debe tener de 4 a 6 números.');
@@ -230,6 +236,7 @@ function SettingsScreen() {
               <label className="field inline"><span>Mesas</span><input type="number" inputMode="numeric" value={l.tables} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.tables = Math.max(0, Number(e.target.value)); })} /></label>
             </div>
             <input value={localAddress(l)} placeholder="Dirección (la ven los clientes)" aria-label={`Dirección de ${l.name}`} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.address = e.target.value; })} />
+            <LocalLocatorButton local={l} />
             <input type="url" value={localMapsUrl(l)} placeholder="Enlace de Google Maps del local" aria-label={`Ubicación de ${l.name}`} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.mapsUrl = e.target.value; })} />
             <div className="pay-line">
               <label className="field inline"><span>Abre</span><input type="time" value={localOpen(l)} onChange={(e) => mutate((d) => { d.locales.find((x) => x.id === l.id)!.open = e.target.value; })} /></label>
@@ -250,6 +257,8 @@ function SettingsScreen() {
         <div className="card">
           <h3>Este celular</h3>
           <p className="muted small">Conectado a la base de datos de La Tata Food. Los pedidos se comparten en tiempo real con todos los celulares del personal.</p>
+          <button className="btn" onClick={() => { setDone('Preparando respaldo…'); void downloadBackup(db).then((n) => setDone(`Respaldo descargado: ${n} pedidos, carta y usuarios (sin códigos). Guárdalo en tu Google Drive o correo.`)); }}>⬇ Descargar respaldo completo</button>
+          {done && <p className="notice">{done}</p>}
           <ConfirmButton label="Desconectar este celular" title="Desconectar este celular" message="Para volver a usar la app en este celular habrá que escribir la clave del local." confirmLabel="Desconectar" onConfirm={() => { void signOutDevice(); }} />
         </div>
       ) : (
@@ -263,6 +272,30 @@ function SettingsScreen() {
           {done && <p className="notice">{done}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Seguridad: intentos fallidos, celulares conectados y cierre de sesiones. */
+function SecurityCard() {
+  const [sum, setSum] = useState<SecuritySummary | null>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { void fetchSecuritySummary().then(setSum); }, []);
+  return (
+    <div className="card ticket-settings">
+      <h3>🔒 Seguridad</h3>
+      {sum ? (
+        <div className="kpis">
+          <div className="kpi"><span>Códigos errados (24 h)</span><b>{sum.failed_24h}</b><small>{sum.failed_1h} en la última hora</small></div>
+          <div className="kpi"><span>Celulares con sesión</span><b>{sum.devices}</b><small>del personal</small></div>
+          <div className="kpi"><span>Base de datos</span><b>{sum.db_size_mb} MB</b><small>de 500 MB del plan gratis</small></div>
+        </div>
+      ) : <p className="muted small">Ejecuta el archivo 07-seguridad.sql en Supabase para ver este resumen.</p>}
+      {sum && sum.failed_1h >= 10 && <p className="err-text small">Muchos códigos errados en la última hora: alguien podría estar probando códigos. Cambia los códigos y cierra las sesiones.</p>}
+      <p className="muted small">Si se pierde o roban un celular del personal, cierra todas las sesiones: cada uno tendrá que volver a escribir su código.</p>
+      <ConfirmButton className="btn ghost danger" label="Cerrar sesión en todos los demás celulares" title="Cerrar todas las sesiones" message="Todos los celulares del personal (menos este) tendrán que volver a ingresar su código." confirmLabel="Cerrar sesiones"
+        onConfirm={() => { void logoutAllDevices().then((r) => setMsg(r.error ? r.error : `Listo: se cerró la sesión en ${r.n} ${r.n === 1 ? 'celular' : 'celulares'}.`)); }} />
+      {msg && <p className="notice">{msg}</p>}
     </div>
   );
 }

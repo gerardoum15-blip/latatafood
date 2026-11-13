@@ -88,3 +88,60 @@ export function waitMinutes(db: DB, queue: number): number {
   const t = [...waitTiers(db)].sort((a, b) => b.min - a.min).find((x) => queue >= x.min);
   return t?.minutes ?? 30;
 }
+
+
+// ---------- Delivery por distancia ----------
+export const DEFAULT_DELIVERY_TIERS = [
+  { upTo: 0.3, price: 3 },
+  { upTo: 0.9, price: 4 },
+  { upTo: 1.5, price: 5 },
+  { upTo: 3, price: 8 },
+  { upTo: 6, price: 10 },
+  { upTo: 8, price: 12 },
+];
+export const deliveryTiers = (db: DB) => (db.settings.deliveryTiers?.length ? db.settings.deliveryTiers : DEFAULT_DELIVERY_TIERS).slice().sort((a, b) => a.upTo - b.upTo);
+export const roadFactor = (db: DB) => db.settings.roadFactor ?? 1.3;
+export const maxDeliveryKm = (db: DB) => Math.max(...deliveryTiers(db).map((t) => t.upTo));
+
+/** Distancia en línea recta (km). */
+export function straightKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371, toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Distancia aproximada por calles (km) entre el cliente y un local con coordenadas. */
+export function roadKm(db: DB, l: Local, p: { lat: number; lng: number }): number | null {
+  if (l.lat == null || l.lng == null) return null;
+  return Math.round(straightKm({ lat: l.lat, lng: l.lng }, p) * roadFactor(db) * 100) / 100;
+}
+
+/** Costo de delivery para una distancia. null = fuera de zona. */
+export function deliveryFeeFor(db: DB, km: number): number | null {
+  const t = deliveryTiers(db).find((x) => km <= x.upTo);
+  return t ? t.price : null;
+}
+
+/** Local más cercano al cliente (solo locales con coordenadas). */
+export function nearestLocal(db: DB, p: { lat: number; lng: number }): { local: Local; km: number } | null {
+  let best: { local: Local; km: number } | null = null;
+  for (const l of db.locales) {
+    const km = roadKm(db, l, p);
+    if (km != null && (!best || km < best.km)) best = { local: l, km };
+  }
+  return best;
+}
+
+export const kmLabel = (km: number) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`);
+
+/** Dirección para buscar cada local en el mapa (la primera vez). */
+const LOCAL_GEO_QUERY: Record<string, string> = {
+  'l-andahuaylas': 'Ranra Cancha 545, Santa Anita, Lima, Perú',
+  'l-praderas': 'Av. Las Praderas 250, El Agustino, Lima, Perú',
+};
+export const localGeoQuery = (l: Local) => LOCAL_GEO_QUERY[l.id] ?? `${l.address ?? l.name}, Lima, Perú`;
+
+// ---------- Clientes frecuentes ----------
+export const DEFAULT_LOYALTY = { frequentMin: 5, frequentPct: 0, vipMin: 15, vipPct: 0 };
+export const loyalty = (db: DB) => ({ ...DEFAULT_LOYALTY, ...(db.settings.loyalty ?? {}) });

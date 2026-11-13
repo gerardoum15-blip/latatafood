@@ -9,10 +9,22 @@ import { CLOUD, submitOrderRequest, useKitchenQueue, type WebOrder } from '../da
 import { OrderTracker, rememberTracking, useTracking } from './OrderTracker';
 import { buildCreamItem, CreamPanel, ProductCustomizer, productPrice, type CreamPicks } from '../components/OrderBuilder';
 import { ItemLines, Modal } from '../components/ui';
-import { hoursLabel, localAddress, localMapsUrl, payInfo, suggestPackaging, waitMinutes } from '../lib/rules';
+import { deliveryFeeFor, hoursLabel, kmLabel, localAddress, localMapsUrl, maxDeliveryKm, nearestLocal, payInfo, suggestPackaging, waitMinutes } from '../lib/rules';
 import logo from '../assets/logo.webp';
 
 const KEY = 'pos-restaurante-cliente';
+const ADDR_KEY = 'latatafood-mis-direcciones';
+type MyAddress = { label: string; address: string; lat: number | null; lng: number | null };
+/** Direcciones del cliente guardadas solo en su celular (casa, oficina…). */
+function loadMyAddresses(): MyAddress[] {
+  try { return JSON.parse(localStorage.getItem(ADDR_KEY) ?? '[]') as MyAddress[]; } catch { return []; }
+}
+function saveMyAddress(a: MyAddress): MyAddress[] {
+  // Una sola "Casa" y una sola "Oficina" (la nueva reemplaza a la anterior); "Otra" puede haber varias.
+  const next = [a, ...loadMyAddresses().filter((x) => x.address !== a.address && (a.label === 'Otra' || x.label !== a.label))].slice(0, 5);
+  try { localStorage.setItem(ADDR_KEY, JSON.stringify(next)); } catch { /* sin almacenamiento */ }
+  return next;
+}
 type Client = { name: string; phone: string };
 
 function loadClient(): Client | null {
@@ -68,6 +80,8 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const [address, setAddress] = useState('');
   const [loc, setLoc] = useState<PickedLocation | null>(null);
   const maps = loc ? mapsUrlFor(loc) : '';
+  const [addrLabel, setAddrLabel] = useState('Casa');
+  const [myAddrs, setMyAddrs] = useState<MyAddress[]>(loadMyAddresses);
   const [sendErr, setSendErr] = useState('');
   const [pay, setPay] = useState<PayMethod>('efectivo');
   const [cash, setCash] = useState('');
@@ -86,11 +100,15 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const items = creamItem ? [...cart, creamItem] : cart;
   const count = cart.reduce((s, i) => s + i.qty, 0);
   const pkg = mode === 'mesa' ? { qty: 0, amount: 0 } : suggestPackaging(cart, db);
-  const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkg.amount;
+  // Delivery: costo según la distancia al local más cercano (si los locales están ubicados).
+  const near = mode === 'delivery' && loc ? nearestLocal(db, loc) : null;
+  const fee = near ? deliveryFeeFor(db, near.km) : null;
+  const outOfZone = !!near && fee === null;
+  const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkg.amount + (mode === 'delivery' && fee ? fee : 0);
   const local = db.locales.find((l) => l.id === localId);
   const pi = payInfo(db);
   const tableNo = Number(table);
-  const ready = count > 0 && (mode === 'recojo' || (mode === 'mesa' ? tableNo >= 1 : !!address.trim()));
+  const ready = count > 0 && !outOfZone && (mode === 'recojo' || (mode === 'mesa' ? tableNo >= 1 : !!address.trim()));
   const wait = waitMinutes(db, queue ?? 0);
 
   const message = useMemo(() => {
@@ -102,6 +120,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
       L.push('Entrega: Delivery');
       if (address.trim()) L.push(`Dirección: ${address.trim()}`);
       if (maps) L.push(`Ubicación: ${maps}`);
+      L.push(fee != null && near ? `Costo de delivery: ${money(fee)} (aprox. ${kmLabel(near.km)})` : 'Costo de delivery: según distancia');
     } else if (mode === 'mesa') {
       L.push(`Entrega: Comer en mesa ${tableNo || '?'} · ${local?.name ?? 'local'}`);
     } else {
@@ -115,12 +134,12 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
     }
     if (pkg.amount) L.push(`Empaques: ${pkg.qty} ${pkg.qty === 1 ? 'táper' : 'táperes'} = ${money(pkg.amount)}`);
     L.push('');
-    L.push(`*Total: ${money(total)}*${mode === 'delivery' ? ' + delivery según distancia' : ''}`);
+    L.push(`*Total: ${money(total)}*${mode === 'delivery' && fee == null ? ' + delivery según distancia' : ''}`);
     L.push(`Pago: ${PAY_LABEL[pay]}${pay === 'efectivo' && cash ? `, paga con ${money(Number(cash))}` : ''}`);
     if (pay === 'yape' || pay === 'plin' || pay === 'web') L.push('Envío la captura del pago por este chat.');
     if (note.trim()) L.push(`Comentario: ${note.trim()}`);
     return L.join('\n');
-  }, [db.settings.businessName, client, mode, tableNo, address, maps, local, items, pkg, total, pay, cash, note]);
+  }, [db.settings.businessName, client, mode, tableNo, address, maps, local, items, pkg, total, pay, cash, note, fee, near]);
 
   return (
     <div className="customer">
@@ -191,14 +210,17 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
       {open && (
         <Modal title="Mi pedido" onClose={() => setOpen(false)} footer={
           <div className="driver-actions">
-            <div className="total-row"><span>Total{mode === 'delivery' ? ' (+ delivery según distancia)' : ''}</span><b>{money(total)}</b></div>
+            {mode === 'delivery' && fee != null && near && <div className="total-row"><span>Delivery (aprox. {kmLabel(near.km)})</span><b>{money(fee)}</b></div>}
+            {outOfZone && <p className="err-text small">Tu ubicación está fuera de nuestra zona de reparto (más de {maxDeliveryKm(db)} km). Escríbenos al WhatsApp {db.settings.whatsapp} o elige recojo en local.</p>}
+            <div className="total-row"><span>Total{mode === 'delivery' && fee == null ? ' (+ delivery según distancia)' : ''}</span><b>{money(total)}</b></div>
             <p className="muted small">Al enviar, se abre WhatsApp con tu pedido. Confirmamos cuando validemos el pago.</p>
             {ready ? (
               <a className="btn wa big-ok block" href={waLink(db.settings.whatsapp, message)} target="_blank" rel="noreferrer" onClick={() => {
                 // Registrar el pedido para que el mozo delivery lo valide (y además se abre WhatsApp con el resumen).
                 const data: WebOrder = {
                   v: 1,
-                  customer: { name: client.name, phone: client.phone, address: mode === 'delivery' ? address.trim() : mode === 'mesa' ? `Mesa ${tableNo} · ${local?.name ?? ''}` : `Recojo en ${local?.name ?? 'local'}`, mapsUrl: mode === 'delivery' ? maps : '', lat: mode === 'delivery' ? loc?.lat ?? null : null, lng: mode === 'delivery' ? loc?.lng ?? null : null },
+                  deliveryFee: mode === 'delivery' ? fee : null, distanceKm: near?.km ?? null,
+                  customer: { label: mode === 'delivery' ? addrLabel : undefined, name: client.name, phone: client.phone, address: mode === 'delivery' ? address.trim() : mode === 'mesa' ? `Mesa ${tableNo} · ${local?.name ?? ''}` : `Recojo en ${local?.name ?? 'local'}`, mapsUrl: mode === 'delivery' ? maps : '', lat: mode === 'delivery' ? loc?.lat ?? null : null, lng: mode === 'delivery' ? loc?.lng ?? null : null },
                   mode, table: mode === 'mesa' ? tableNo : null, localId: mode === 'delivery' ? null : localId, pay, cashWith: pay === 'efectivo' && cash ? Number(cash) : null, note: note.trim(),
                   items: cart, creamPicks: picks, packagingQty: pkg.qty, packagingAmount: pkg.amount, total,
                 };
@@ -207,6 +229,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
                     if (r.id) { rememberTracking(r.id); setShowTrack(r.id); } else setSendErr(r.error ?? 'sin conexión');
                   });
                 }
+                if (mode === 'delivery' && address.trim()) setMyAddrs(saveMyAddress({ label: addrLabel, address: address.trim(), lat: loc?.lat ?? null, lng: loc?.lng ?? null }));
                 setOpen(false); setCart([]); setPicks({}); setNote('');
               }}>💬 Enviar pedido</a>
             ) : (
@@ -240,7 +263,22 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
             </div>
             {mode === 'delivery' ? (
               <>
+                {myAddrs.length > 0 && (
+                  <div className="saved-addr">
+                    <span className="muted small">Tus direcciones:</span>
+                    {myAddrs.map((a) => (
+                      <button key={a.label + a.address} className={address === a.address ? 'chip active' : 'chip'} onClick={() => { setAddress(a.address); setAddrLabel(a.label); setLoc(a.lat != null && a.lng != null ? { lat: a.lat, lng: a.lng } : null); }}>
+                        {a.label}: {a.address.length > 28 ? a.address.slice(0, 28) + '…' : a.address}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <LocationPicker value={loc} onChange={setLoc} onAddress={setAddress} />
+                <div className="local-picker" role="radiogroup" aria-label="Guardar esta dirección como">
+                  <span className="muted small">Guardar como:</span>
+                  {['Casa', 'Oficina', 'Otra'].map((l) => <button key={l} role="radio" aria-checked={addrLabel === l} className={addrLabel === l ? 'seg active' : 'seg'} onClick={() => setAddrLabel(l)}>{l}</button>)}
+                </div>
+                {near && fee != null && <p className="small fee-note">🛵 Delivery: <b>{money(fee)}</b> · aprox. {kmLabel(near.km)} de {near.local.name}</p>}
                 <label className="field"><span>Dirección de envío</span><input id="c-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, referencia" /><span className="muted small">Revisa y agrega referencias (piso, color de puerta…).</span></label>
                 {pkg.amount > 0 && <p className="muted small">Empaques: {pkg.qty} {pkg.qty === 1 ? 'táper' : 'táperes'} = {money(pkg.amount)}</p>}
               </>

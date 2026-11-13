@@ -446,7 +446,10 @@ export interface OrderRequest {
 /** Lo que envía la carta del cliente. */
 export interface WebOrder {
   v: 1;
-  customer: { name: string; phone: string; address: string; mapsUrl: string; lat: number | null; lng: number | null };
+  customer: { name: string; phone: string; address: string; mapsUrl: string; lat: number | null; lng: number | null; label?: string };
+  /** Costo de delivery calculado por distancia (si se pudo) y distancia aproximada en km. */
+  deliveryFee?: number | null;
+  distanceKm?: number | null;
   mode: 'delivery' | 'recojo' | 'mesa';
   /** Comer en mesa: número de mesa. */
   table?: number | null;
@@ -572,4 +575,44 @@ export async function trackOrder(ref: string): Promise<(RequestStatus & { locati
   if (!r.error) return r.data;
   const old = await fetchRequestStatus(ref); // sin 05-ubicacion-drivers.sql
   return old ? { ...old, location: null } : null;
+}
+
+// ---------- Seguridad y respaldo (administrador) ----------
+
+export interface SecuritySummary { failed_24h: number; failed_1h: number; devices: number; orders: number; db_size_mb: number }
+export async function fetchSecuritySummary(): Promise<SecuritySummary | null> {
+  if (!supabase) return null;
+  const r = await supabase.rpc('security_summary');
+  return r.error ? null : (r.data as SecuritySummary);
+}
+export async function logoutAllDevices(): Promise<{ n?: number; error?: string }> {
+  if (!supabase) return { error: 'Sin conexión' };
+  const r = await supabase.rpc('staff_logout_all');
+  return r.error ? { error: r.error.message } : { n: r.data as number };
+}
+
+/** Respaldo completo: carta, usuarios (sin códigos), pedidos y pedidos web, en un archivo JSON. */
+export async function downloadBackup(db: DB) {
+  const all: Order[] = [];
+  if (supabase && state.status === 'ready') {
+    for (let from = 0; ; from += 1000) {
+      const r = await supabase.from('orders').select('data').order('created_at').range(from, from + 999);
+      if (r.error) break;
+      all.push(...r.data.map((x) => x.data as Order));
+      if (r.data.length < 1000) break;
+    }
+  }
+  const reqs = supabase ? (await supabase.from('order_requests').select('*').order('created_at')).data ?? [] : [];
+  const backup = {
+    app: 'La Tata Food', exportedAt: new Date().toISOString(),
+    catalog: catalogOf(db), users: db.users.map(({ pin: _p, ...u }) => u),
+    orders: all.length ? all : db.orders, orderRequests: reqs,
+  };
+  const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `latatafood-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  return backup.orders.length;
 }

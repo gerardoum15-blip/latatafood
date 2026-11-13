@@ -14,6 +14,8 @@ export interface ParsedOrder {
   creamPicks: CreamPicks;
   /** Monto de empaques (null = calcular). */
   packaging: number | null;
+  /** Costo de delivery (null = calcular por distancia). */
+  deliveryFee: number | null;
   /** Pedido para comer en mesa (desde la carta). */
   dineIn: { table: number | null } | null;
   note: string;
@@ -43,6 +45,7 @@ export function parseOrderMessage(text: string, db: DB, localId: string): Parsed
   let pay: PayMethod | null = null;
   let cashWith: number | null = null;
   let packaging: number | null = null;
+  let deliveryFee: number | null = null;
   let note = '';
   let messageTotal: number | null = null;
   const creamPicks: CreamPicks = {};
@@ -116,6 +119,9 @@ export function parseOrderMessage(text: string, db: DB, localId: string): Parsed
     } else if (key === 'empaques') {
       const all = [...val.matchAll(/S\/\s*([\d.,]+)/g)];
       if (all.length) packaging = num(all[all.length - 1][1]);
+    } else if (key === 'costo de delivery') {
+      const m = val.match(/S\/\s*([\d.,]+)/);
+      if (m) deliveryFee = num(m[1]);
     } else if (key === 'total') {
       const m = val.match(/S\/\s*([\d.,]+)/);
       if (m) messageTotal = num(m[1]);
@@ -149,12 +155,12 @@ export function parseOrderMessage(text: string, db: DB, localId: string): Parsed
   if (!customer.phone) warnings.push('No encontré el WhatsApp del cliente.');
 
   const cream = buildCreamItem(db, cart, creamPicks);
-  const computedTotal = [...cart, ...(cream ? [cream] : [])].reduce((s, i) => s + i.unitPrice * i.qty, 0) + (packaging ?? 0);
+  const computedTotal = [...cart, ...(cream ? [cream] : [])].reduce((s, i) => s + i.unitPrice * i.qty, 0) + (packaging ?? 0) + (deliveryFee ?? 0);
   if (messageTotal !== null && Math.abs(messageTotal - computedTotal) > 0.009) {
     warnings.push(`El total del mensaje (S/ ${messageTotal.toFixed(2)}) es distinto al de la carta actual (S/ ${computedTotal.toFixed(2)}). Revisa precios y cantidades.`);
   }
 
-  return { customer, pickup, localId: pickLocal, pay, cashWith, cart, creamPicks, packaging, dineIn: null, note, messageTotal, computedTotal, warnings };
+  return { customer, pickup, localId: pickLocal, pay, cashWith, cart, creamPicks, packaging, deliveryFee, dineIn: null, note, messageTotal, computedTotal, warnings };
 }
 
 /**
@@ -177,14 +183,15 @@ export function webOrderToParsed(data: WebOrder, db: DB, localId: string): Parse
   for (const [gid, opts] of Object.entries(data.creamPicks ?? {})) if (db.groups.some((g) => g.id === gid)) creamPicks[gid] = opts;
   const cream = buildCreamItem(db, cart, creamPicks);
   const pkg = data.mode === 'mesa' ? 0 : data.packagingAmount ?? (data.packagingQty ?? 0) * (db.settings.packagingPrice ?? 0.5);
-  const computedTotal = [...cart, ...(cream ? [cream] : [])].reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkg;
+  const fee = data.mode === 'delivery' ? data.deliveryFee ?? null : null;
+  const computedTotal = [...cart, ...(cream ? [cream] : [])].reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkg + (fee ?? 0);
   if (Math.abs((data.total ?? 0) - computedTotal) > 0.009) {
     warnings.push(`El cliente vio un total de S/ ${(data.total ?? 0).toFixed(2)} y con la carta actual es S/ ${computedTotal.toFixed(2)}. Revisa antes de confirmar.`);
   }
   const pay = (Object.keys(PAY_LABEL) as PayMethod[]).includes(data.pay as PayMethod) ? data.pay as PayMethod : null;
   return {
-    customer: { name: data.customer.name, phone: data.customer.phone, address: data.customer.address, reference: '', mapsUrl: data.customer.mapsUrl ?? '' },
+    customer: { name: data.customer.name, phone: data.customer.phone, address: data.customer.address, reference: '', mapsUrl: data.customer.mapsUrl ?? '', lat: data.customer.lat, lng: data.customer.lng, label: data.customer.label },
     pickup: data.mode === 'recojo', localId: data.localId, pay, cashWith: data.cashWith, cart, creamPicks,
-    packaging: pkg, dineIn: data.mode === 'mesa' ? { table: data.table ?? null } : null, note: data.note ?? '', messageTotal: data.total, computedTotal, warnings,
+    packaging: pkg, deliveryFee: fee, dineIn: data.mode === 'mesa' ? { table: data.table ?? null } : null, note: data.note ?? '', messageTotal: data.total, computedTotal, warnings,
   };
 }

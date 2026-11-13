@@ -32,3 +32,6 @@ export function daysLabel(days?: number[]): string {
 
 /** Número visible del pedido ("#…" mientras el servidor lo asigna). */
 export const orderNo = (o: { number: number }) => (o.number ? `#${o.number}` : '#…');
+
+/** "12 nov" */
+export const dateShort = (t: number) => new Date(t).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' });

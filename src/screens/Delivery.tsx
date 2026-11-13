@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { addItems, createOrder, nextDriver, orderTotal, setOrderDiscount, useDb, useSession } from '../data/store';
 import { PAY_LABEL, type Customer, type PayMethod } from '../types';
 import { money, orderNo } from '../lib/format';
 import { isUrl, trackUrl, waLink } from '../lib/whatsapp';
-import { minutesAgo } from '../lib/format';
+import { dateShort, minutesAgo } from '../lib/format';
 import { CLOUD, resolveRequest, useRequests, type OrderRequest } from '../data/cloud';
 import { beep } from './Kitchen';
+import { buildCustomers, phoneId, TIER_LABEL } from '../lib/customers';
+import { deliveryFeeFor, kmLabel, maxDeliveryKm, nearestLocal, roadKm } from '../lib/rules';
 import { LocalPicker } from '../components/shared';
 import { NewItems, type InitialOrder } from './Waiter';
 import { Modal } from '../components/ui';
@@ -51,6 +53,7 @@ export function DeliveryScreen() {
 
   const applyParsed = (r: ParsedOrder) => {
     setCustomer({ ...EMPTY, ...r.customer });
+    setFeeManual(r.deliveryFee != null ? String(r.deliveryFee) : null);
     setDineIn(r.dineIn);
     setPickup(r.pickup);
     setPayOk(false);
@@ -81,6 +84,18 @@ export function DeliveryScreen() {
     : !!(customer.name.trim() && customer.phone.trim() && (customer.address.trim() || isUrl(customer.mapsUrl)) && (!customer.mapsUrl.trim() || isUrl(customer.mapsUrl)));
   const canSend = valid && !!localId && (!activeReq || payOk);
   const turnDriver = db.users.find((u) => u.id === nextDriver(db));
+
+  // Ficha del cliente por su WhatsApp (pedidos anteriores, direcciones guardadas).
+  const customers = useMemo(() => buildCustomers(db), [db]);
+  const profile = phoneId(customer.phone).length === 9 ? customers.get(phoneId(customer.phone)) : undefined;
+
+  // Costo de delivery sugerido por distancia (si hay ubicación del cliente y del local).
+  const point = customer.lat != null && customer.lng != null ? { lat: customer.lat, lng: customer.lng } : null;
+  const km = point && local ? roadKm(db, local, point) : null;
+  const near = point ? nearestLocal(db, point) : null;
+  const suggestedFee = km != null ? deliveryFeeFor(db, km) : null;
+  const [feeManual, setFeeManual] = useState<string | null>(null);
+  const fee = dineIn || pickup ? 0 : feeManual !== null ? Number(feeManual) || 0 : suggestedFee ?? 0;
 
   if (sent) {
     return (
@@ -185,8 +200,40 @@ export function DeliveryScreen() {
           </div>
           <label className="field"><span>Nombre *</span><input id="d-name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} /></label>
           <label className="field"><span>Contacto (WhatsApp) *</span><input id="d-phone" type="tel" inputMode="tel" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="987654321" /></label>
+          {profile && (
+            <div className={`full customer-card tier-${profile.tier}`}>
+              <div className="row between wrap">
+                <b>{TIER_LABEL[profile.tier]}</b>
+                <span className="small">{profile.orders} {profile.orders === 1 ? 'pedido' : 'pedidos'} · {money(profile.spent)} · último {dateShort(profile.last)}</span>
+              </div>
+              {!customer.name && profile.name && <button className="link small" onClick={() => setCustomer({ ...customer, name: profile.name })}>Usar el nombre "{profile.name}"</button>}
+              {profile.suggestedPct > 0 && <p className="small">Descuento sugerido por ser {profile.tier === 'vip' ? 'VIP' : 'frecuente'}: <b>{profile.suggestedPct}%</b> (aplícalo en "Descuento al pedido").</p>}
+              {profile.addresses.length > 0 && (
+                <div className="saved-addr">
+                  <span className="muted small">Direcciones guardadas:</span>
+                  {profile.addresses.slice(0, 4).map((a) => (
+                    <button key={a.address} className={customer.address === a.address ? 'chip active' : 'chip'}
+                      onClick={() => { setCustomer({ ...customer, name: customer.name || profile.name, address: a.address, mapsUrl: a.mapsUrl, lat: a.lat, lng: a.lng, label: a.label }); setFeeManual(null); }}>
+                      {a.label ? `${a.label}: ` : ''}{a.address.length > 34 ? a.address.slice(0, 34) + '…' : a.address}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <label className="field full"><span>URL de ubicación (Google Maps)</span><input id="d-maps" type="url" value={customer.mapsUrl} onChange={(e) => setCustomer({ ...customer, mapsUrl: e.target.value })} placeholder="https://maps.app.goo.gl/…" />{customer.mapsUrl.trim() && !isUrl(customer.mapsUrl) && <span className="err-text small">Debe ser un enlace que empiece con https://</span>}</label>
-          <label className="field full"><span>Dirección *</span><input id="d-address" value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} placeholder="Calle, número, referencia" /></label>
+          <label className="field full"><span>Dirección *</span><input id="d-address" value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value, lat: null, lng: null })} placeholder="Calle, número, referencia" /></label>
+          {!dineIn && !pickup && (
+            <label className="field"><span>Costo de delivery (S/)</span>
+              <input id="d-fee" type="number" inputMode="decimal" step="0.5" value={feeManual ?? (suggestedFee ?? '')} placeholder="Según distancia" onChange={(e) => setFeeManual(e.target.value)} />
+              <span className="muted small">
+                {km != null ? (suggestedFee != null ? `Sugerido ${money(suggestedFee)} · aprox. ${kmLabel(km)} de ${local?.name}` : `Fuera de zona: aprox. ${kmLabel(km)} (más de ${maxDeliveryKm(db)} km)`)
+                  : point ? 'Ubica los locales en Ajustes para calcularlo solo.' : 'Sin ubicación del cliente: escríbelo a mano.'}
+                {near && local && near.local.id !== local.id ? ` · Más cerca: ${near.local.name} (${kmLabel(near.km)})` : ''}
+                {feeManual !== null && suggestedFee != null && <> · <button className="link small" onClick={() => setFeeManual(null)}>usar sugerido</button></>}
+              </span>
+            </label>
+          )}
           <label className="field"><span>Método de pago</span>
             <select id="d-pay" value={pay} onChange={(e) => setPay(e.target.value as PayMethod)}>
               {METHODS.map((m) => <option key={m} value={m}>{PAY_LABEL[m]}</option>)}
@@ -209,14 +256,14 @@ export function DeliveryScreen() {
           else id = createOrder({ localId, channel: 'salon', table: dineIn.table, customer: c.phone ? c : null, deliveryFee: 0, plannedPay: pay, cashWith: null, driverId: null, items, discount, note: [`Pedido web de ${c.name}`, note].filter(Boolean).join(' · ') }, user);
         } else {
           id = createOrder({
-            localId, channel: 'delivery', table: null, customer: c, deliveryFee: 0,
+            localId, channel: 'delivery', table: null, customer: c, deliveryFee: fee,
             packagingQty: pkg.qty, packagingAmount: pkg.amount,
             plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note, pickup, discount,
           }, user);
         }
         if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
-        setSent({ id, ref: activeReq?.id ?? id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: 0, packagingAmount: dineIn ? 0 : pkg.amount, discount }) });
-        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal);
+        setSent({ id, ref: activeReq?.id ?? id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: dineIn ? 0 : fee, packagingAmount: dineIn ? 0 : pkg.amount, discount }) });
+        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal); setFeeManual(null);
       }}
     />
   );

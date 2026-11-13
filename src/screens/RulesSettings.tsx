@@ -1,6 +1,6 @@
 import { mutate, useDb } from '../data/store';
 import { money } from '../lib/format';
-import { packagingMax, packagingTiers, payInfo, waitTiers } from '../lib/rules';
+import { deliveryTiers, kmLabel, loyalty, packagingMax, packagingTiers, payInfo, roadFactor, waitTiers } from '../lib/rules';
 
 /** Ajustes: empaques por precio, tiempo de espera y datos de pago. */
 export function RulesSettings() {
@@ -10,6 +10,10 @@ export function RulesSettings() {
   const pi = payInfo(db);
   const setPT = (next: typeof pt) => mutate((d) => { d.settings.packagingTiers = next; });
   const setWT = (next: typeof wt) => mutate((d) => { d.settings.waitTiers = next; });
+  const dt = deliveryTiers(db);
+  const setDT = (next: typeof dt) => mutate((d) => { d.settings.deliveryTiers = next; });
+  const ly = loyalty(db);
+  const setLY = (patch: Partial<typeof ly>) => mutate((d) => { d.settings.loyalty = { ...loyalty(d), ...patch }; });
   return (
     <>
       <div className="card ticket-settings">
@@ -40,6 +44,31 @@ export function RulesSettings() {
           </div>
         ))}
         <button className="btn ghost small" onClick={() => setWT([...wt, { min: 0, minutes: 30 }])}>+ Agregar rango</button>
+      </div>
+
+      <div className="card ticket-settings">
+        <h3>Costo de delivery por distancia</h3>
+        <p className="muted small">Se calcula con la ubicación del cliente y la del local (ubica tus locales arriba, en Locales). Más allá del último tramo se considera fuera de zona.</p>
+        <div className="tier-row muted small"><span>Hasta (km)</span><span>Costo (S/)</span><span /></div>
+        {dt.map((t, i) => (
+          <div key={i} className="tier-row">
+            <input type="number" inputMode="decimal" step="0.1" aria-label="Hasta kilómetros" value={t.upTo} onChange={(e) => setDT(dt.map((x, j) => (j === i ? { ...x, upTo: Number(e.target.value) } : x)))} />
+            <input type="number" inputMode="decimal" step="0.5" aria-label="Costo de delivery" value={t.price} onChange={(e) => setDT(dt.map((x, j) => (j === i ? { ...x, price: Number(e.target.value) } : x)))} />
+            <button className="icon-btn" aria-label="Quitar tramo" onClick={() => setDT(dt.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <button className="btn ghost small" onClick={() => setDT([...dt, { upTo: (dt[dt.length - 1]?.upTo ?? 0) + 1, price: 0 }])}>+ Agregar tramo</button>
+        <label className="field inline"><span>Factor calles</span><input id="road-factor" type="number" inputMode="decimal" step="0.05" value={roadFactor(db)} onChange={(e) => mutate((d) => { d.settings.roadFactor = Number(e.target.value) || 1; })} /></label>
+        <p className="muted small">La distancia se mide en línea recta y se multiplica por este factor para aproximar el recorrido por calles (1.3 = 30% más). Ej.: {kmLabel(1)} en línea recta ≈ {kmLabel(roadFactor(db))} por calles.</p>
+      </div>
+
+      <div className="card ticket-settings">
+        <h3>Clientes frecuentes</h3>
+        <p className="muted small">El cliente se reconoce por su número de WhatsApp. El mozo delivery ve su ficha al escribir el número.</p>
+        <div className="tier-row muted small"><span>Desde N pedidos</span><span>Descuento sugerido %</span><span /></div>
+        <div className="tier-row"><input type="number" inputMode="numeric" aria-label="Frecuente desde" value={ly.frequentMin} onChange={(e) => setLY({ frequentMin: Number(e.target.value) })} /><input type="number" inputMode="numeric" aria-label="Descuento frecuente" value={ly.frequentPct} onChange={(e) => setLY({ frequentPct: Number(e.target.value) })} /><span>⭐</span></div>
+        <div className="tier-row"><input type="number" inputMode="numeric" aria-label="VIP desde" value={ly.vipMin} onChange={(e) => setLY({ vipMin: Number(e.target.value) })} /><input type="number" inputMode="numeric" aria-label="Descuento VIP" value={ly.vipPct} onChange={(e) => setLY({ vipPct: Number(e.target.value) })} /><span>👑</span></div>
+        <p className="muted small">Con 0% no se sugiere descuento; solo se muestra la etiqueta.</p>
       </div>
 
       <div className="card ticket-settings">
