@@ -167,6 +167,8 @@ export interface NewOrderInput {
   pickup?: boolean;
   /** Fuera de zona: se envía por InDrive (no se asigna driver). */
   indrive?: boolean;
+  /** Captura del pago. */
+  payProof?: string;
 }
 
 /** Pedido delivery sin driver propio (recojo o InDrive), incluso los antiguos de recojo. */

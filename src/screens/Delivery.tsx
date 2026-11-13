@@ -14,6 +14,7 @@ import { LocalPicker } from '../components/shared';
 import { NewItems, type Draft, type InitialOrder } from './Waiter';
 import { Modal } from '../components/ui';
 import { TicketButton, TicketPreview } from '../components/TicketButton';
+import { compressImage, imageFromClipboard } from '../lib/image';
 import { parseOrderMessage, webOrderToParsed, type ParsedOrder } from '../lib/parseOrder';
 
 const EMPTY: Customer = { name: '', phone: '', address: '', reference: '', mapsUrl: '' };
@@ -24,8 +25,8 @@ export function DeliveryScreen() {
   const db = useDb();
   const user = useSession()!;
   const fixed = user.role === 'delivery' && !!user.localId;
-  /** Solo el mozo delivery confirma o rechaza pedidos de la carta. */
-  const canValidate = user.role === 'delivery';
+  /** El mozo delivery y el administrador confirman o rechazan pedidos de la carta. */
+  const canValidate = user.role === 'delivery' || user.role === 'admin';
   // El mozo delivery decide en cada pedido qué local lo prepara (según demanda o cercanía).
   const defaultLocal = fixed ? user.localId! : '';
   const [localId, setLocalId] = useState<string>(defaultLocal);
@@ -56,6 +57,7 @@ export function DeliveryScreen() {
   const [payOk, setPayOk] = useState(false);
   /** Pedido tal como se lo confirmó el cliente (si cambia algo, hay que volver a confirmar). */
   const [confirmedSig, setConfirmedSig] = useState<string | null>(null);
+  const [payProof, setPayProof] = useState<string | null>(null);
 
   const applyParsed = (r: ParsedOrder) => {
     setCustomer({ ...EMPTY, ...r.customer });
@@ -67,6 +69,7 @@ export function DeliveryScreen() {
     setLocalId(r.localId ?? defaultLocal);
     setLocalManual(false);
     setConfirmedSig(null);
+    setPayProof(null);
     if (r.pay) setPay(r.pay);
     setCashWith(r.cashWith ? String(r.cashWith) : '');
     setInitial({ cart: r.cart, picks: r.creamPicks, pkgAmount: r.packaging, note: [r.pickup ? 'RECOJO EN LOCAL' : '', r.dineIn ? 'COMER EN MESA' : '', r.note].filter(Boolean).join(' · ') });
@@ -168,7 +171,7 @@ export function DeliveryScreen() {
         {CLOUD && (
           <section className="web-inbox" aria-label="Pedidos web por validar">
             <h3>Pedidos web por validar <span className="count">{pending.length}</span></h3>
-            <p className="muted small">Ningún pedido de la carta va a cocina sin que el <b>mozo delivery</b> lo revise, valide el pago y lo confirme al cliente por WhatsApp.</p>
+            <p className="muted small">Ningún pedido de la carta va a cocina sin que el <b>mozo delivery</b> (o el administrador) lo revise y valide el pago.</p>
             {pending.length === 0 && <p className="muted small">Cuando un cliente pida desde la carta, aparecerá aquí al instante.</p>}
             {pending.map((r) => (
               <article key={r.id} className={activeReq?.id === r.id ? 'card web-req active' : 'card web-req'}>
@@ -190,13 +193,19 @@ export function DeliveryScreen() {
         )}
         {rejecting && (
           <Modal title={`Rechazar pedido de ${rejecting.data.customer.name}`} onClose={() => setRejecting(null)} footer={
-            <a className="btn wa block" target="_blank" rel="noreferrer"
-              href={waLink(rejecting.data.customer.phone, `Hola ${rejecting.data.customer.name.split(' ')[0]}, lo sentimos: no podemos atender tu pedido en ${db.settings.businessName}${rejectReason.trim() ? ` (${rejectReason.trim()})` : ''}. Escríbenos si deseas cambiar algo.`)}
-              onClick={() => { void resolveRequest(rejecting.id, 'rechazado', user.name, { reason: rejectReason.trim() }); if (activeReq?.id === rejecting.id) setActiveReq(null); setRejecting(null); }}>
-              Rechazar y avisar por WhatsApp
-            </a>
+            <div className="row gap">
+              <button className="btn danger-solid grow" onClick={() => { void resolveRequest(rejecting.id, 'rechazado', user.name, { reason: rejectReason.trim() }); if (activeReq?.id === rejecting.id) setActiveReq(null); setRejecting(null); }}>
+                Rechazar
+              </button>
+              <a className="btn wa grow" target="_blank" rel="noreferrer"
+                href={waLink(rejecting.data.customer.phone, `Hola ${rejecting.data.customer.name.split(' ')[0]}, lo sentimos: no podemos atender tu pedido en ${db.settings.businessName}${rejectReason.trim() ? ` (${rejectReason.trim()})` : ''}. Escríbenos si deseas cambiar algo.`)}
+                onClick={() => { void resolveRequest(rejecting.id, 'rechazado', user.name, { reason: rejectReason.trim() }); if (activeReq?.id === rejecting.id) setActiveReq(null); setRejecting(null); }}>
+                Rechazar y avisar
+              </a>
+            </div>
           }>
-            <label className="field"><span>Motivo (lo verá el cliente)</span><input id="reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Ej. fuera de nuestra zona de reparto" /></label>
+            <p className="muted small">Avisar al cliente es opcional.</p>
+            <label className="field"><span>Motivo (opcional)</span><input id="reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Ej. fuera de nuestra zona de reparto" /></label>
           </Modal>
         )}
         <button className="btn paste-btn block" onClick={() => setPasteOpen(true)}>📋 Pegar pedido de WhatsApp</button>
@@ -294,7 +303,7 @@ export function DeliveryScreen() {
       }
       packaging={!dineIn}
       beforeSend={needsConfirm ? (d) => <ConfirmStep localId={localId} draft={d} fee={pickup || indrive ? 0 : fee} pickup={pickup} indrive={indrive} customer={customer} pay={pay} cashWith={cashWith}
-        confirmedSig={confirmedSig} onConfirm={setConfirmedSig} /> : undefined}
+        confirmedSig={confirmedSig} onConfirm={setConfirmedSig} proof={payProof} setProof={setPayProof} /> : undefined}
       onSend={(items, note, pkg, discount) => {
         const c = { ...customer, name: customer.name.trim(), phone: customer.phone.trim(), address: customer.address.trim(), mapsUrl: customer.mapsUrl.trim() };
         let id: string;
@@ -307,19 +316,20 @@ export function DeliveryScreen() {
           id = createOrder({
             localId, channel: 'delivery', table: null, customer: c, deliveryFee: fee,
             packagingQty: pkg.qty, packagingAmount: pkg.amount,
-            plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note: [indrive ? 'ENVÍO POR INDRIVE' : '', note].filter(Boolean).join(' · '), pickup, indrive, discount,
+            plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note: [indrive ? 'ENVÍO POR INDRIVE' : '', note].filter(Boolean).join(' · '), pickup, indrive, discount, ...(payProof ? { payProof } : {}),
           }, user);
         }
         if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
         setSent({ id, ref: activeReq?.id ?? id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: dineIn ? 0 : fee, packagingAmount: dineIn ? 0 : pkg.amount, discount }) });
-        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal); setLocalManual(false); setConfirmedSig(null); setFeeManual(null); setIndriveManual(null); lastAutofill.current = '';
+        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal); setLocalManual(false); setConfirmedSig(null); setPayProof(null); setFeeManual(null); setIndriveManual(null); lastAutofill.current = '';
       }}
     />
   );
 }
 
 /** Antes de cocina: el mozo delivery manda el resumen al cliente, cobra y marca que confirmó. */
-function ConfirmStep({ localId, draft, fee, pickup, indrive, customer, pay, cashWith, confirmedSig, onConfirm }: {
+function ConfirmStep({ localId, draft, fee, pickup, indrive, customer, pay, cashWith, confirmedSig, onConfirm, proof, setProof }: {
+  proof: string | null; setProof: (p: string | null) => void;
   localId: string; draft: Draft; fee: number; pickup: boolean; indrive: boolean; customer: Customer; pay: PayMethod; cashWith: string;
   confirmedSig: string | null; onConfirm: (sig: string | null) => void;
 }) {
@@ -379,8 +389,35 @@ function ConfirmStep({ localId, draft, fee, pickup, indrive, customer, pay, cash
           {customer.phone.trim() && <a className="btn small ghost" target="_blank" rel="noreferrer" href={waLink(customer.phone)}>Abrir chat de {customer.phone}</a>}
         </TicketPreview>
       )}
+      {pay !== 'efectivo' && <PayProof proof={proof} setProof={setProof} />}
       <label className="check"><input id="pay-ok" type="checkbox" checked={ok} onChange={(e) => onConfirm(e.target.checked ? sig : null)} />
         {' '}El cliente confirmó y {pay === 'efectivo' ? 'sé con cuánto paga' : 'ya pagó (captura recibida)'}</label>
+    </div>
+  );
+}
+
+/** Captura del pago: pegar (copiada de WhatsApp) o elegir de Fotos. Opcional. */
+function PayProof({ proof, setProof }: { proof: string | null; setProof: (p: string | null) => void }) {
+  const [msg, setMsg] = useState('');
+  const load = async (b: Blob | null | undefined) => {
+    if (!b) { setMsg('No hay una imagen copiada. En WhatsApp mantén presionada la captura → Copiar.'); return; }
+    try { setProof(await compressImage(b)); setMsg(''); } catch (e) { setMsg(e instanceof Error ? e.message : 'No se pudo leer la imagen'); }
+  };
+  return (
+    <div className="pay-proof">
+      <span className="small"><b>Captura del pago</b> (opcional)</span>
+      {proof ? (
+        <div className="row gap">
+          <img src={proof} alt="Captura del pago" className="proof-thumb" />
+          <button className="btn small ghost danger" onClick={() => setProof(null)}>Quitar</button>
+        </div>
+      ) : (
+        <div className="row gap wrap">
+          <button className="btn small" onClick={() => { void imageFromClipboard().then(load).catch(() => setMsg('Tu celular no dejó pegar: usa "Subir de Fotos".')); }}>📋 Pegar captura</button>
+          <label className="btn small">📷 Subir de Fotos<input type="file" accept="image/*" hidden onChange={(e) => { void load(e.target.files?.[0]); e.target.value = ''; }} /></label>
+        </div>
+      )}
+      {msg && <p className="err-text small">{msg}</p>}
     </div>
   );
 }

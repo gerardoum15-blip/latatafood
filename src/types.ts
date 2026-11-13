@@ -222,6 +222,8 @@ export interface Order {
   closedAt: number | null;
   history: StatusEvent[];
   sunat: { status: SunatStatus; type: 'boleta' | 'factura' | null };
+  /** Captura del pago (Yape, Plin…) que subió el mozo delivery. */
+  payProof?: string;
 }
 
 /** Ticket (imagen) que se envía al cliente. */

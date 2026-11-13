@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { uid, useDb } from '../data/store';
-import { PAY_LABEL, type OrderItem, type PayMethod, type Product } from '../types';
+import { PAY_LABEL, type Order, type OrderItem, type PayMethod, type Product } from '../types';
+import { renderTicket } from '../lib/ticket';
 import { availableToday, daysLabel, money } from '../lib/format';
 import { waLink } from '../lib/whatsapp';
 import { LocationPicker } from '../components/LazyMaps';
@@ -146,6 +147,27 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
     return L.join('\n');
   }, [db.settings.businessName, client, mode, tableNo, address, maps, local, items, pkg, total, pay, cash, note, fee, near]);
 
+  // Resumen del pedido como imagen (ticket), listo para mandarlo por WhatsApp.
+  const [ticketFile, setTicketFile] = useState<File | null>(null);
+  useEffect(() => {
+    if (!open || !ready) { setTicketFile(null); return; }
+    let alive = true;
+    const t = setTimeout(() => {
+      const o: Order = {
+        id: 'web', number: 0, localId: mode === 'delivery' ? near?.local.id ?? localId : localId, channel: mode === 'mesa' ? 'salon' : 'delivery', table: mode === 'mesa' ? tableNo : null,
+        customer: { name: client.name, phone: client.phone, address: mode === 'delivery' ? address.trim() : mode === 'mesa' ? `Mesa ${tableNo}` : 'Recojo en local', reference: '', mapsUrl: maps },
+        deliveryFee: mode === 'delivery' && fee ? fee : 0, packagingQty: pkg.qty, packagingAmount: pkg.amount,
+        selfDelivery: mode === 'recojo' ? 'recojo' : mode === 'delivery' && outOfZone ? 'indrive' : undefined,
+        plannedPay: pay, cashWith: pay === 'efectivo' && cash ? Number(cash) : null, driverId: null, items, note: note.trim(),
+        kitchenStatus: 'enviado', deliveryStatus: null, served: false, closed: false, cancelled: false, payments: [],
+        createdAt: Date.now(), createdBy: '', createdByName: '', sentAt: 0, readyAt: null, closedAt: null, history: [], sunat: { status: 'no_emitido', type: null },
+      };
+      void renderTicket(o, db, { heading: 'PEDIDO WEB' }).then((b) => { if (alive) setTicketFile(new File([b], 'mi-pedido.png', { type: 'image/png' })); }).catch(() => undefined);
+    }, 400);
+    return () => { alive = false; clearTimeout(t); };
+  }, [open, ready, message]);
+  const canShareImage = !!ticketFile && typeof navigator.canShare === 'function' && navigator.canShare({ files: [ticketFile] });
+
   return (
     <div className="customer">
       <header className="c-hero">
@@ -218,9 +240,11 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
             {mode === 'delivery' && fee != null && near && <div className="total-row"><span>Delivery (aprox. {kmLabel(near.km)})</span><b>{money(fee)}</b></div>}
             {outOfZone && <p className="indrive-note small">🚗 Estás a más de {maxDeliveryKm(db)} km: el envío se hace por <b>InDrive</b> y se paga aparte. Lo coordinamos contigo por WhatsApp (o puedes elegir recojo en local).</p>}
             <div className="total-row"><span>Total{mode === 'delivery' && outOfZone ? ' (+ envío InDrive)' : mode === 'delivery' && fee == null ? ' (+ delivery según distancia)' : ''}</span><b>{money(total)}</b></div>
-            <p className="muted small">Al enviar, se abre WhatsApp con tu pedido. Confirmamos cuando validemos el pago.</p>
+            <p className="muted small">Te mandamos el resumen como imagen al WhatsApp de pedidos. Confirmamos cuando validemos el pago.</p>
             {ready ? (
-              <a className="btn wa big-ok block" href={waLink(db.settings.whatsapp, message)} target="_blank" rel="noreferrer" onClick={() => {
+              <>
+              <button className="btn wa big-ok block" onClick={() => {
+                const submit = () => {
                 // Registrar el pedido para que el mozo delivery lo valide (y además se abre WhatsApp con el resumen).
                 const data: WebOrder = {
                   v: 1,
@@ -236,7 +260,17 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
                 }
                 if (mode === 'delivery' && address.trim()) setMyAddrs(saveMyAddress({ label: addrLabel, address: address.trim(), lat: loc?.lat ?? null, lng: loc?.lng ?? null }));
                 setOpen(false); setCart([]); setPicks({}); setNote('');
-              }}>💬 Enviar pedido</a>
+};
+                if (canShareImage) {
+                  // Comparte la imagen del pedido: elige el chat de {db.settings.businessName} en WhatsApp.
+                  void navigator.share({ files: [ticketFile!], text: `Pedido de ${client.name} · Total ${money(total)} · para ${db.settings.businessName} (${db.settings.whatsapp})` }).then(submit).catch(() => undefined);
+                } else {
+                  window.open(waLink(db.settings.whatsapp, message), '_blank');
+                  submit();
+                }
+              }}>💬 Enviar pedido por WhatsApp{canShareImage ? ' (imagen)' : ''}</button>
+              {canShareImage && <p className="muted small">Se abrirá "Compartir": elige <b>WhatsApp</b> y el chat de <b>{db.settings.businessName} ({db.settings.whatsapp})</b>. <a href={waLink(db.settings.whatsapp, message)} target="_blank" rel="noreferrer">o envíalo como texto</a></p>}
+              </>
             ) : (
               <button className="btn block" disabled>{count === 0 ? 'Agrega platos' : mode === 'mesa' ? 'Escribe el número de tu mesa' : 'Marca tu ubicación o escribe tu dirección'}</button>
             )}

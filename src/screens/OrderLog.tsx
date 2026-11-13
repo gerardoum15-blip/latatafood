@@ -109,7 +109,7 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
           <button className="btn small ok" onClick={() => setDeliveryStatus(order.id, 'entregado', me)}>✅ {order.selfDelivery === 'indrive' ? 'Entregado' : 'Entregado al cliente'}</button>
         </div>
       )}
-      {order.channel === 'delivery' && order.customer?.phone && !order.cancelled && (me.role === 'delivery' || me.role === 'admin') && st !== 'entregado' && (
+      {order.channel === 'delivery' && order.customer?.phone && (me.role === 'delivery' || me.role === 'admin') && st !== 'entregado' && (
         <a className="btn small wa notify-btn" target="_blank" rel="noreferrer"
           href={waLink(order.customer.phone, customerStatusText(order, db.settings.businessName, trackUrl(order.id), driver?.name))}>
           💬 Avisar al cliente: {STAGE_LABEL[st]}
@@ -125,6 +125,7 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
         {order.customer && (
           <p className="small">{order.customer.phone} · {order.customer.address}</p>
         )}
+        {order.payProof && <div className="small"><b>Captura del pago:</b><br /><img src={order.payProof} alt="Captura del pago" className="proof-full" /></div>}
         <ItemLines items={order.items} />
         {order.note && <p className="item-note">📝 {order.note}</p>}
         <Timeline order={order} />

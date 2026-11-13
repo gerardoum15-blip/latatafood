@@ -136,7 +136,7 @@ export function ConfirmButton({ className = 'btn ghost danger', label, title, me
         }>
           {message && <p>{message}</p>}
           {reason && (
-            <label className="field"><span>Motivo</span><input id="confirm-reason" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ej. cliente canceló" autoFocus /></label>
+            <label className="field"><span>Motivo (opcional)</span><input id="confirm-reason" value={text} onChange={(e) => setText(e.target.value)} placeholder="Puedes dejarlo vacío" /></label>
           )}
         </Modal>
       )}
