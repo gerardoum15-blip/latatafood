@@ -164,7 +164,12 @@ export interface NewOrderInput {
   note: string;
   /** Recojo en local: no se asigna driver. */
   pickup?: boolean;
+  /** Fuera de zona: se envía por InDrive (no se asigna driver). */
+  indrive?: boolean;
 }
+
+/** Pedido delivery sin driver propio (recojo o InDrive), incluso los antiguos de recojo. */
+export const withoutDriver = (o: Order) => o.channel === 'delivery' && (!!o.selfDelivery || /^recojo/i.test(o.customer?.address ?? ''));
 
 /** Driver de turno: el que hace más tiempo no recibe un pedido (rotación). */
 export function nextDriver(d: DB): string | null {
@@ -175,10 +180,10 @@ export function nextDriver(d: DB): string | null {
   return [...drivers].sort((a, b) => (last.get(a.id) ?? 0) - (last.get(b.id) ?? 0))[0].id;
 }
 
-export function createOrder({ pickup, ...input }: NewOrderInput, user: User): string {
+export function createOrder({ pickup, indrive, ...input }: NewOrderInput, user: User): string {
   const id = uid('o');
   mutate((d) => {
-    if (input.channel === 'delivery' && !pickup && !input.driverId) input = { ...input, driverId: nextDriver(d) };
+    if (input.channel === 'delivery' && !pickup && !indrive && !input.driverId) input = { ...input, driverId: nextDriver(d) };
     // En la nube el número lo asigna el servidor (0 = pendiente).
     const n = CLOUD ? 0 : (d.counters[input.localId] ?? 0) + 1;
     if (!CLOUD) d.counters[input.localId] = n;
@@ -200,7 +205,8 @@ export function createOrder({ pickup, ...input }: NewOrderInput, user: User): st
       sentAt: now,
       readyAt: null,
       closedAt: null,
-      history: [event(user, 'Pedido creado y enviado a cocina'), ...(input.discount ? [event(user, `Descuento al pedido: S/ ${input.discount.amount.toFixed(2)} (${input.discount.reason})`)] : []), ...(input.driverId ? [event(user, `Driver de turno: ${d.users.find((u) => u.id === input.driverId)?.name ?? ''}`)] : [])],
+      ...(pickup ? { selfDelivery: 'recojo' as const } : indrive ? { selfDelivery: 'indrive' as const } : {}),
+      history: [event(user, 'Pedido creado y enviado a cocina'), ...(indrive ? [event(user, 'Fuera de zona: envío por InDrive')] : []), ...(input.discount ? [event(user, `Descuento al pedido: S/ ${input.discount.amount.toFixed(2)} (${input.discount.reason})`)] : []), ...(input.driverId ? [event(user, `Driver de turno: ${d.users.find((u) => u.id === input.driverId)?.name ?? ''}`)] : [])],
       sunat: { status: 'no_emitido', type: null },
     });
   });

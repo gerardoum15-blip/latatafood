@@ -500,3 +500,5 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .customer-card p { margin: 0; }
 .saved-addr { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .fee-note { margin: 0; padding: 8px 10px; background: var(--ok-soft); color: var(--ok); border-radius: 10px; }
+.indrive-note { margin: 0; padding: 8px 10px; background: #fff7e0; color: #7a4a00; border-radius: 10px; }
+.self-delivery { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }

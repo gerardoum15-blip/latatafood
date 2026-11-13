@@ -96,8 +96,6 @@ export const DEFAULT_DELIVERY_TIERS = [
   { upTo: 0.9, price: 4 },
   { upTo: 1.5, price: 5 },
   { upTo: 3, price: 8 },
-  { upTo: 6, price: 10 },
-  { upTo: 8, price: 12 },
 ];
 export const deliveryTiers = (db: DB) => (db.settings.deliveryTiers?.length ? db.settings.deliveryTiers : DEFAULT_DELIVERY_TIERS).slice().sort((a, b) => a.upTo - b.upTo);
 export const roadFactor = (db: DB) => db.settings.roadFactor ?? 1.3;

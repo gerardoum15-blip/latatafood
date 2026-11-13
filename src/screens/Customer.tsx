@@ -108,7 +108,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
   const local = db.locales.find((l) => l.id === localId);
   const pi = payInfo(db);
   const tableNo = Number(table);
-  const ready = count > 0 && !outOfZone && (mode === 'recojo' || (mode === 'mesa' ? tableNo >= 1 : !!address.trim()));
+  const ready = count > 0 && (mode === 'recojo' || (mode === 'mesa' ? tableNo >= 1 : !!address.trim()));
   const wait = waitMinutes(db, queue ?? 0);
 
   const message = useMemo(() => {
@@ -120,7 +120,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
       L.push('Entrega: Delivery');
       if (address.trim()) L.push(`Dirección: ${address.trim()}`);
       if (maps) L.push(`Ubicación: ${maps}`);
-      L.push(fee != null && near ? `Costo de delivery: ${money(fee)} (aprox. ${kmLabel(near.km)})` : 'Costo de delivery: según distancia');
+      L.push(outOfZone && near ? `Envío: por InDrive (fuera de zona, aprox. ${kmLabel(near.km)})` : fee != null && near ? `Costo de delivery: ${money(fee)} (aprox. ${kmLabel(near.km)})` : 'Costo de delivery: según distancia');
     } else if (mode === 'mesa') {
       L.push(`Entrega: Comer en mesa ${tableNo || '?'} · ${local?.name ?? 'local'}`);
     } else {
@@ -134,7 +134,7 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
     }
     if (pkg.amount) L.push(`Empaques: ${pkg.qty} ${pkg.qty === 1 ? 'táper' : 'táperes'} = ${money(pkg.amount)}`);
     L.push('');
-    L.push(`*Total: ${money(total)}*${mode === 'delivery' && fee == null ? ' + delivery según distancia' : ''}`);
+    L.push(`*Total: ${money(total)}*${mode === 'delivery' && outOfZone ? ' + envío por InDrive' : mode === 'delivery' && fee == null ? ' + delivery según distancia' : ''}`);
     L.push(`Pago: ${PAY_LABEL[pay]}${pay === 'efectivo' && cash ? `, paga con ${money(Number(cash))}` : ''}`);
     if (pay === 'yape' || pay === 'plin' || pay === 'web') L.push('Envío la captura del pago por este chat.');
     if (note.trim()) L.push(`Comentario: ${note.trim()}`);
@@ -211,8 +211,8 @@ function CustomerMenu({ client, onChangeClient }: { client: Client; onChangeClie
         <Modal title="Mi pedido" onClose={() => setOpen(false)} footer={
           <div className="driver-actions">
             {mode === 'delivery' && fee != null && near && <div className="total-row"><span>Delivery (aprox. {kmLabel(near.km)})</span><b>{money(fee)}</b></div>}
-            {outOfZone && <p className="err-text small">Tu ubicación está fuera de nuestra zona de reparto (más de {maxDeliveryKm(db)} km). Escríbenos al WhatsApp {db.settings.whatsapp} o elige recojo en local.</p>}
-            <div className="total-row"><span>Total{mode === 'delivery' && fee == null ? ' (+ delivery según distancia)' : ''}</span><b>{money(total)}</b></div>
+            {outOfZone && <p className="indrive-note small">🚗 Estás a más de {maxDeliveryKm(db)} km: el envío se hace por <b>InDrive</b> y se paga aparte. Lo coordinamos contigo por WhatsApp (o puedes elegir recojo en local).</p>}
+            <div className="total-row"><span>Total{mode === 'delivery' && outOfZone ? ' (+ envío InDrive)' : mode === 'delivery' && fee == null ? ' (+ delivery según distancia)' : ''}</span><b>{money(total)}</b></div>
             <p className="muted small">Al enviar, se abre WhatsApp con tu pedido. Confirmamos cuando validemos el pago.</p>
             {ready ? (
               <a className="btn wa big-ok block" href={waLink(db.settings.whatsapp, message)} target="_blank" rel="noreferrer" onClick={() => {

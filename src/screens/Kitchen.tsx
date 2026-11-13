@@ -28,6 +28,19 @@ export function beep() {
 }
 
 export function KitchenScreen() {
+  return <NeedsLocal><KitchenScreenInner /></NeedsLocal>;
+}
+
+/** Cocina y mozo de mesa trabajan solo en su local: sin local asignado no pueden entrar. */
+function NeedsLocal({ children }: { children: import('react').ReactNode }) {
+  const user = useSession()!;
+  if (user.role !== 'admin' && !user.localId) {
+    return <div className="page"><div className="empty">Tu usuario no tiene un local asignado. Pide al administrador que te lo asigne en <b>Usuarios</b>.</div></div>;
+  }
+  return <>{children}</>;
+}
+
+function KitchenScreenInner() {
   const db = useDb();
   const user = useSession()!;
   const [localId, setLocalId] = useWorkLocal(user.role === 'cocina' ? user.localId : null);

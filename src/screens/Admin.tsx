@@ -168,7 +168,7 @@ function UserForm({ initial, isSelf, onClose }: { initial: User; isSelf: boolean
   const isNew = !u.id;
   const save = async () => {
     if (!u.name.trim()) return setErr('Escribe un nombre.');
-    if (u.role === 'cocina' && !u.localId) return setErr('Cocina debe tener un local asignado.');
+    if ((u.role === 'cocina' || u.role === 'mozo') && !u.localId) return setErr(`${u.role === 'cocina' ? 'Cocina' : 'El mozo de mesa'} debe tener un local asignado: solo verá los pedidos de ese local.`);
     if (server) {
       // PIN cifrado en el servidor: vacío = no cambiar (obligatorio solo para usuarios nuevos).
       if (u.pin && !/^\d{4,6}$/.test(u.pin)) return setErr('El código debe tener de 4 a 6 números.');
@@ -200,7 +200,7 @@ function UserForm({ initial, isSelf, onClose }: { initial: User; isSelf: boolean
           {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
         </select>
       </label>
-      <label className="field"><span>Local {u.role === 'cocina' ? '(obligatorio)' : '(vacío = puede elegir local)'}</span>
+      <label className="field"><span>Local {u.role === 'cocina' || u.role === 'mozo' ? '(obligatorio: solo verá este local)' : '(vacío = puede elegir local)'}</span>
         <select value={u.localId ?? ''} onChange={(e) => setU({ ...u, localId: e.target.value || null })}>
           <option value="">Todos / elige al trabajar</option>
           {db.locales.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}

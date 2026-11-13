@@ -42,15 +42,15 @@ export default function App() {
   }
   switch (user.role) {
     case 'admin': return <AdminScreen />;
-    case 'mozo': return <RoleShell label="Mesas" main={<WaiterScreen />} drivers />;
+    case 'mozo': return <RoleShell label="Mesas" main={<WaiterScreen />} drivers lock={user.localId ?? undefined} />;
     case 'delivery': return <RoleShell label="Tomar pedido" main={<DeliveryScreen />} drivers />;
-    case 'cocina': return <RoleShell label="Cocina" main={<KitchenScreen />} local={user.localId ?? 'all'} />;
+    case 'cocina': return <RoleShell label="Cocina" main={<KitchenScreen />} lock={user.localId ?? undefined} />;
     case 'driver': return <RoleShell label="Mis entregas" main={<DriverScreen />} />;
   }
 }
 
 /** Pantalla de trabajo + Registro de pedidos (todos ven los estados). */
-function RoleShell({ label, main, local = 'all', drivers }: { label: string; main: ReactNode; local?: string; drivers?: boolean }) {
+function RoleShell({ label, main, local = 'all', drivers, lock }: { label: string; main: ReactNode; local?: string; drivers?: boolean; lock?: string }) {
   const [tab, setTab] = useState<'main' | 'log' | 'drivers'>('main');
   return (
     <>
@@ -58,7 +58,7 @@ function RoleShell({ label, main, local = 'all', drivers }: { label: string; mai
       <div className="role-tabs">
         <Tabs value={tab} onChange={setTab} options={[{ value: 'main', label }, { value: 'log', label: 'Registro' }, ...(drivers ? [{ value: 'drivers' as const, label: 'Drivers' }] : [])]} />
       </div>
-      {tab === 'main' ? main : tab === 'log' ? <OrderLog defaultLocal={local} /> : <DriversPanel />}
+      {tab === 'main' ? main : tab === 'log' ? <OrderLog defaultLocal={local} lockLocal={lock} /> : <DriversPanel />}
     </>
   );
 }

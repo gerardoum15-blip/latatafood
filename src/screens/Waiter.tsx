@@ -12,6 +12,19 @@ import { ConfirmButton, ItemLines, Timeline, useTick } from '../components/ui';
 type View = { kind: 'tables' } | { kind: 'new'; table: number } | { kind: 'order'; id: string } | { kind: 'add'; id: string };
 
 export function WaiterScreen() {
+  return <NeedsLocal><WaiterScreenInner /></NeedsLocal>;
+}
+
+/** Cocina y mozo de mesa trabajan solo en su local: sin local asignado no pueden entrar. */
+function NeedsLocal({ children }: { children: import('react').ReactNode }) {
+  const user = useSession()!;
+  if (user.role !== 'admin' && !user.localId) {
+    return <div className="page"><div className="empty">Tu usuario no tiene un local asignado. Pide al administrador que te lo asigne en <b>Usuarios</b>.</div></div>;
+  }
+  return <>{children}</>;
+}
+
+function WaiterScreenInner() {
   const db = useDb();
   const user = useSession()!;
   const [localId, setLocalId] = useWorkLocal(user.role === 'mozo' ? user.localId : null);
@@ -86,7 +99,7 @@ export interface Packaging { qty: number; amount: number }
 
 export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true, packaging, initial }: {
   title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string, packaging: Packaging, discount?: Discount) => void;
-  extra?: React.ReactNode; sendLabel?: string; canSend?: boolean; packaging?: boolean; initial?: InitialOrder;
+  extra?: import('react').ReactNode; sendLabel?: string; canSend?: boolean; packaging?: boolean; initial?: InitialOrder;
 }) {
   const db = useDb();
   const [cart, setCart] = useState<OrderItem[]>(initial?.cart ?? []);

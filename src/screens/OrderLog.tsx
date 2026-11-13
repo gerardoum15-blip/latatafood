@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { assignDriver, cancelOrder, deleteOrder, orderTotal, packagingTotal, useDb, useSession } from '../data/store';
+import { assignDriver, cancelOrder, deleteOrder, orderTotal, packagingTotal, setDeliveryStatus, useDb, useSession, withoutDriver } from '../data/store';
 import { PAY_LABEL, type Order } from '../types';
 import { dayKey, money, time, orderNo } from '../lib/format';
 import { orderStage, stageHint, STAGE_LABEL, STAGES, type Stage } from '../lib/status';
@@ -8,11 +8,13 @@ import { ConfirmButton, Empty, ItemLines, Timeline, useTick } from '../component
 import { TicketButton } from '../components/TicketButton';
 
 /** Registro de pedidos con color por estado. Lo ven todos los usuarios. */
-export function OrderLog({ admin, defaultLocal = 'all' }: { admin?: boolean; defaultLocal?: string }) {
+/** `lockLocal`: cocina y mozo de mesa solo ven su local. */
+export function OrderLog({ admin, defaultLocal = 'all', lockLocal }: { admin?: boolean; defaultLocal?: string; lockLocal?: string }) {
   const db = useDb();
   useTick();
   const [day, setDay] = useState(dayKey(Date.now()));
-  const [localId, setLocalId] = useState(defaultLocal);
+  const [localPick, setLocalId] = useState(defaultLocal);
+  const localId = lockLocal ?? localPick;
   const [channel, setChannel] = useState<'all' | 'salon' | 'delivery'>('all');
   const [stage, setStage] = useState<Stage | 'all'>('all');
 
@@ -34,7 +36,7 @@ export function OrderLog({ admin, defaultLocal = 'all' }: { admin?: boolean; def
         <label className="field inline"><span>Fecha</span><input id="log-day" type="date" value={day} max={dayKey(Date.now())} onChange={(e) => setDay(e.target.value || dayKey(Date.now()))} /></label>
       </div>
       <div className="filters">
-        <LocalPicker value={localId} onChange={setLocalId} allowAll />
+        <LocalPicker value={localId} onChange={setLocalId} allowAll={!lockLocal} fixed={!!lockLocal} />
         <div className="local-picker">
           {(['all', 'salon', 'delivery'] as const).map((c) => (
             <button key={c} className={channel === c ? 'seg active' : 'seg'} onClick={() => setChannel(c)}>
@@ -75,7 +77,7 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
       </div>
       <div className="muted small">
         {local?.name} · {time(order.createdAt)} · {order.createdByName}
-        {order.channel === 'delivery' && ` · ${driver ? `Driver: ${driver.name}` : 'sin driver'}`}
+        {order.channel === 'delivery' && ` · ${withoutDriver(order) ? (order.selfDelivery === 'indrive' ? 'InDrive' : 'Recojo') : driver ? `Driver: ${driver.name}` : 'sin driver'}`}
       </div>
       <div className="small">{order.items.map((i) => `${i.qty}× ${i.name}`).join(', ')}</div>
       <div className="row between">
@@ -94,6 +96,15 @@ function LogTicket({ order, admin }: { order: Order; admin?: boolean }) {
             </select>
           )}
           <ConfirmButton className="btn small ghost danger" label="Anular" title={`Anular pedido ${orderNo(order)}`} message="El pedido no contará en las ventas." reason confirmLabel="Anular pedido" onConfirm={(r) => cancelOrder(order.id, r, me)} />
+        </div>
+      )}
+      {withoutDriver(order) && !order.closed && !order.cancelled && (me.role === 'delivery' || me.role === 'admin') && (
+        <div className="row gap wrap self-delivery">
+          <span className="small"><b>{order.selfDelivery === 'indrive' ? '🚗 Envío por InDrive' : '🏪 Recoge en local'}</b></span>
+          {order.selfDelivery === 'indrive' && order.deliveryStatus === 'pendiente' && (
+            <button className="btn small" onClick={() => setDeliveryStatus(order.id, 'en_camino', me)}>Enviado por InDrive</button>
+          )}
+          <button className="btn small ok" onClick={() => setDeliveryStatus(order.id, 'entregado', me)}>✅ {order.selfDelivery === 'indrive' ? 'Entregado' : 'Entregado al cliente'}</button>
         </div>
       )}
       {admin && (

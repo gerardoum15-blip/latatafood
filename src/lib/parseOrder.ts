@@ -16,6 +16,8 @@ export interface ParsedOrder {
   packaging: number | null;
   /** Costo de delivery (null = calcular por distancia). */
   deliveryFee: number | null;
+  /** Fuera de zona: envío por InDrive. */
+  indrive?: boolean;
   /** Pedido para comer en mesa (desde la carta). */
   dineIn: { table: number | null } | null;
   note: string;
@@ -46,6 +48,7 @@ export function parseOrderMessage(text: string, db: DB, localId: string): Parsed
   let cashWith: number | null = null;
   let packaging: number | null = null;
   let deliveryFee: number | null = null;
+  let indrive = false;
   let note = '';
   let messageTotal: number | null = null;
   const creamPicks: CreamPicks = {};
@@ -119,6 +122,8 @@ export function parseOrderMessage(text: string, db: DB, localId: string): Parsed
     } else if (key === 'empaques') {
       const all = [...val.matchAll(/S\/\s*([\d.,]+)/g)];
       if (all.length) packaging = num(all[all.length - 1][1]);
+    } else if (key === 'envio' && /indrive/i.test(val)) {
+      indrive = true;
     } else if (key === 'costo de delivery') {
       const m = val.match(/S\/\s*([\d.,]+)/);
       if (m) deliveryFee = num(m[1]);
@@ -160,7 +165,7 @@ export function parseOrderMessage(text: string, db: DB, localId: string): Parsed
     warnings.push(`El total del mensaje (S/ ${messageTotal.toFixed(2)}) es distinto al de la carta actual (S/ ${computedTotal.toFixed(2)}). Revisa precios y cantidades.`);
   }
 
-  return { customer, pickup, localId: pickLocal, pay, cashWith, cart, creamPicks, packaging, deliveryFee, dineIn: null, note, messageTotal, computedTotal, warnings };
+  return { customer, pickup, localId: pickLocal, pay, cashWith, cart, creamPicks, packaging, deliveryFee, indrive, dineIn: null, note, messageTotal, computedTotal, warnings };
 }
 
 /**

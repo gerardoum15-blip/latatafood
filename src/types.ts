@@ -200,6 +200,8 @@ export interface Order {
   packagingAmount?: number;
   /** Descuento al pedido completo. */
   discount?: Discount;
+  /** Delivery sin driver propio: el cliente recoge, o se envía por InDrive (fuera de zona). */
+  selfDelivery?: 'recojo' | 'indrive';
   /** Delivery: forma de pago acordada con el cliente. */
   plannedPay: PayMethod | null;
   cashWith: number | null;
