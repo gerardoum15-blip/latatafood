@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { trackOrder, type RequestStatus } from '../data/cloud';
-import { LiveMap } from '../components/LiveMap';
+import { LiveMap } from '../components/LazyMaps';
 import logo from '../assets/logo.webp';
 import { useDb } from '../data/store';
 import { Modal } from '../components/ui';

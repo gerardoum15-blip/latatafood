@@ -3,7 +3,8 @@ import { orderTotal, useDb } from '../data/store';
 import { useDriverLocations } from '../data/cloud';
 import { DELIVERY_LABEL, PAY_LABEL } from '../types';
 import { dayKey, money, orderNo, time } from '../lib/format';
-import { LiveMap, type MapPoint } from '../components/LiveMap';
+import { LiveMap } from '../components/LazyMaps';
+import type { MapPoint } from '../lib/geo';
 import { Empty, useTick } from '../components/ui';
 
 const minsAgo = (iso: string) => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));

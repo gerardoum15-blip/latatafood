@@ -61,6 +61,26 @@ let channel: RealtimeChannel | null = null;
 let current: string | null = null;
 const dirtyAgain = new Set<string>();
 
+// ---------- Cambios pendientes guardados en el celular ----------
+// Si el celular se queda sin internet y la app se cierra, los cambios no se pierden:
+// quedan aquí y se envían al volver la conexión.
+const PENDING_KEY = 'latatafood-pendientes';
+type Pending = { keys: string[]; bases: Record<string, Order> };
+function readPending(): Pending {
+  try { return JSON.parse(localStorage.getItem(PENDING_KEY) ?? '') as Pending; } catch { return { keys: [], bases: {} }; }
+}
+function savePending() {
+  const keys = [...queue];
+  const bases: Record<string, Order> = {};
+  for (const k of keys) if (k.startsWith('order:') && base.has(k.slice(6))) bases[k.slice(6)] = base.get(k.slice(6))!;
+  try {
+    if (keys.length) localStorage.setItem(PENDING_KEY, JSON.stringify({ keys, bases }));
+    else localStorage.removeItem(PENDING_KEY);
+  } catch { /* sin almacenamiento */ }
+}
+/** Pendientes de una sesión anterior (se recuperan una sola vez al cargar). */
+let restored: Pending | null = typeof window !== 'undefined' ? readPending() : null;
+
 // ---------- Inicio ----------
 
 export async function startCloud(storeApi: StoreApi) {
@@ -183,7 +203,25 @@ async function loadAll() {
       if (r.data.length < 1000) break;
     }
 
-    api.replaceDb({ ...local, ...(catalog ?? catalogOf(local)), ...(staff ?? staffOf(local)), orders });
+    // Recuperar cambios que quedaron sin enviar (por ejemplo, la app se cerró sin internet).
+    let useLocalCatalog = false, useLocalStaff = false;
+    if (restored?.keys.length) {
+      for (const key of restored.keys) {
+        if (key === 'doc:catalog') useLocalCatalog = true;
+        if (key === 'doc:staff') useLocalStaff = true;
+        if (key.startsWith('order:')) {
+          const id = key.slice(6);
+          const mine = local.orders.find((o) => o.id === id);
+          if (!mine) continue;
+          const i = orders.findIndex((o) => o.id === id);
+          if (i >= 0) orders[i] = mergeOrder(restored.bases[id] ?? orders[i], mine, orders[i]);
+          else orders.push(mine);
+        }
+        queue.add(key);
+      }
+    }
+    restored = null;
+    api.replaceDb({ ...local, ...(useLocalCatalog ? catalogOf(local) : catalog ?? catalogOf(local)), ...(useLocalStaff ? staffOf(local) : staff ?? staffOf(local)), orders });
     // Primera vez: subir la carta y los usuarios iniciales.
     if (!catalog) queue.add('doc:catalog');
     if (!staff) {
@@ -289,6 +327,7 @@ export function queueChanges(prev: DB, next: DB) {
 }
 
 function kick() {
+  savePending();
   setState({ pending: queue.size });
   if (!running && queue.size) void run();
 }
@@ -303,6 +342,7 @@ async function run() {
       current = null;
       queue.delete(key);
       if (dirtyAgain.delete(key)) queue.add(key);
+      savePending();
       setState({ pending: queue.size, online: true });
     }
   } catch {

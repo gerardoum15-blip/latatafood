@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-export interface MapPoint { id: string; lat: number; lng: number; label: string; kind: 'driver' | 'driver-old' | 'client' }
+import type { MapPoint } from '../lib/geo';
+export type { MapPoint };
 
 const icon = (kind: MapPoint['kind'], label: string) => L.divIcon({
   className: `live-pin ${kind}`,

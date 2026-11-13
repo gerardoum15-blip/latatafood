@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { addItems, createOrder, nextDriver, orderTotal, useDb, useSession } from '../data/store';
+import { addItems, createOrder, nextDriver, orderTotal, setOrderDiscount, useDb, useSession } from '../data/store';
 import { PAY_LABEL, type Customer, type PayMethod } from '../types';
 import { money, orderNo } from '../lib/format';
 import { isUrl, trackUrl, waLink } from '../lib/whatsapp';
@@ -199,23 +199,23 @@ export function DeliveryScreen() {
         </>
       }
       packaging={!dineIn}
-      onSend={(items, note, pkg) => {
+      onSend={(items, note, pkg, discount) => {
         const c = { ...customer, name: customer.name.trim(), phone: customer.phone.trim(), address: customer.address.trim(), mapsUrl: customer.mapsUrl.trim() };
         let id: string;
         if (dineIn && dineIn.table) {
           // Comer en mesa: va a la mesa del local (si ya tiene pedido abierto, se agrega).
           const open = db.orders.find((o) => o.localId === localId && o.channel === 'salon' && !o.closed && o.table === dineIn.table);
-          if (open) { addItems(open.id, items, user); id = open.id; }
-          else id = createOrder({ localId, channel: 'salon', table: dineIn.table, customer: c.phone ? c : null, deliveryFee: 0, plannedPay: pay, cashWith: null, driverId: null, items, note: [`Pedido web de ${c.name}`, note].filter(Boolean).join(' · ') }, user);
+          if (open) { addItems(open.id, items, user); if (discount) setOrderDiscount(open.id, open.discount ? { amount: open.discount.amount + discount.amount, reason: `${open.discount.reason} + ${discount.reason}` } : discount, user); id = open.id; }
+          else id = createOrder({ localId, channel: 'salon', table: dineIn.table, customer: c.phone ? c : null, deliveryFee: 0, plannedPay: pay, cashWith: null, driverId: null, items, discount, note: [`Pedido web de ${c.name}`, note].filter(Boolean).join(' · ') }, user);
         } else {
           id = createOrder({
             localId, channel: 'delivery', table: null, customer: c, deliveryFee: 0,
             packagingQty: pkg.qty, packagingAmount: pkg.amount,
-            plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note, pickup,
+            plannedPay: pay, cashWith: pay === 'efectivo' && cashWith ? Number(cashWith) : null, driverId: null, items, note, pickup, discount,
           }, user);
         }
         if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
-        setSent({ id, ref: activeReq?.id ?? id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: 0, packagingAmount: dineIn ? 0 : pkg.amount }) });
+        setSent({ id, ref: activeReq?.id ?? id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: 0, packagingAmount: dineIn ? 0 : pkg.amount, discount }) });
         setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal);
       }}
     />

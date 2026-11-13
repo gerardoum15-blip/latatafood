@@ -1,6 +1,6 @@
 import type { DB, Order, TicketSettings } from '../types';
 import { PAY_LABEL } from '../types';
-import { orderTotal, packagingTotal } from '../data/store';
+import { discountTotal, lineTotal, orderTotal, packagingTotal } from '../data/store';
 import defaultLogo from '../assets/logo-round.webp';
 
 export const DEFAULT_TICKET: TicketSettings = {
@@ -84,8 +84,9 @@ async function paint(order: Order, db: DB, t: TicketSettings, logo: HTMLImageEle
       ...(it.modifiers.length ? [it.modifiers.map((m) => (m.qty > 1 ? `${m.qty}× ${m.optionName}` : m.optionName)).join(' · ')] : []),
       ...(it.note ? [`Nota: ${it.note}`] : []),
       ...(it.qty > 1 ? [`${sol(it.unitPrice)} c/u`] : []),
+      ...(it.discount ? [`Descuento −${sol(it.discount.amount)}${it.discount.percent ? ` (${it.discount.percent}%)` : ''} · ${it.discount.reason}`] : []),
     ],
-    price: sol(it.unitPrice * it.qty),
+    price: sol(lineTotal(it)),
   }));
   if (packagingTotal(order) > 0) {
     rows.push({ qty: `${order.packagingQty || 1}x`, name: 'COSTO DE EMPAQUE PARA LLEVAR ♻️', sub: [], price: sol(packagingTotal(order)) });
@@ -117,6 +118,8 @@ async function paint(order: Order, db: DB, t: TicketSettings, logo: HTMLImageEle
     set(size, weight, color); text(`${label}: ${value}`, W - PAD, y + size, 'right'); y += size + 22;
   };
   if (order.deliveryFee) right('Entrega', sol(order.deliveryFee));
+  if (order.discount) right(`Descuento${order.discount.percent ? ` ${order.discount.percent}%` : ''}`, `−${sol(order.discount.amount)}`);
+  if (discountTotal(order) > 0) right('Ahorraste', sol(discountTotal(order)));
   if (t.showIgv && t.igvRate > 0) {
     const base = Math.round((total / (1 + t.igvRate / 100)) * 100) / 100;
     right('Op. gravada', sol(base));

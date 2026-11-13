@@ -3,7 +3,6 @@ import { useDb } from '../data/store';
 import { PAY_LABEL, type Channel } from '../types';
 import { fmtMinutes, money } from '../lib/format';
 import { buildReport, PERIOD_LABEL, periodRange, type Period } from '../lib/reports';
-import { exportReport } from '../lib/exportXlsx';
 import { LocalPicker } from '../components/shared';
 import { Empty, Tabs } from '../components/ui';
 
@@ -27,7 +26,7 @@ export function ReportsScreen() {
   return (
     <div className="page wide">
       <div className="section-head"><h2>Reportes</h2>
-        <button className="btn small" disabled={rep.count === 0} onClick={() => exportReport(db, rep, `${PERIOD_LABEL[period]} ${rangeText} ${localName} ${chanName}`)}>⬇ Exportar Excel</button>
+        <button className="btn small" disabled={rep.count === 0} onClick={() => void import('../lib/exportXlsx').then((m) => m.exportReport(db, rep, `${PERIOD_LABEL[period]} ${rangeText} ${localName} ${chanName}`))}>⬇ Exportar Excel</button>
       </div>
 
       <div className="filters">
@@ -59,6 +58,7 @@ export function ReportsScreen() {
         <div className="kpi"><span>Ticket promedio</span><b>{money(rep.avgTicket)}</b></div>
         <div className="kpi"><span>Salón</span><b>{money(rep.salon.total)}</b><small>{rep.salon.count} tickets</small></div>
         <div className="kpi"><span>Delivery</span><b>{money(rep.delivery.total)}</b><small>{rep.delivery.count} pedidos · empaques {money(rep.packaging)}</small></div>
+        <div className="kpi"><span>Descuentos</span><b>{money(rep.discounts)}</b><small>dados a clientes</small></div>
         <div className="kpi"><span>Tiempo cocina</span><b>{rep.avgKitchenMin !== null ? fmtMinutes(rep.avgKitchenMin) : '—'}</b><small>promedio hasta "Listo"</small></div>
         {rep.avgDeliveryMin !== null && <div className="kpi"><span>Tiempo de entrega</span><b>{fmtMinutes(rep.avgDeliveryMin)}</b><small>de "Listo" a "Entregado"</small></div>}
       </div>

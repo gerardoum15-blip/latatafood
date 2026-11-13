@@ -3,6 +3,7 @@ import { uid, useDb } from '../data/store';
 import type { DB, ModifierGroup, OrderItem, Product, SelectedModifier } from '../types';
 import { availableToday, daysLabel, money } from '../lib/format';
 import { ItemLines, Modal } from './ui';
+import { DiscountModal } from './DiscountModal';
 
 export const productPrice = (p: Product, localId: string) => p.localPrices[localId] ?? p.price;
 
@@ -251,6 +252,8 @@ export function OrderBuilder({ localId, cart, setCart, picks, setPicks }: {
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<Product | null>(null);
   const [custom, setCustom] = useState(false);
+  const [discountFor, setDiscountFor] = useState<string | null>(null);
+  const discountItem = cart.find((x) => x.id === discountFor) ?? null;
 
   const list = useMemo(() => db.products.filter((p) => p.active
     && (cat === 'all' || p.categoryId === cat)
@@ -312,10 +315,17 @@ export function OrderBuilder({ localId, cart, setCart, picks, setPicks }: {
                     <button onClick={() => setCart(cart.map((x) => (x === it ? { ...x, qty: x.qty + 1 } : x)))} aria-label="Más">+</button>
                   </div>
                   <button className="btn ghost small danger" onClick={() => setCart(cart.filter((x) => x !== it))}>Quitar</button>
+                  <button className="btn ghost small" onClick={() => setDiscountFor(it.id)}>{it.discount ? `Desc. −${money(it.discount.amount)}` : '% Descuento'}</button>
                 </div>
               </li>
             ))}
           </ul>
+        )}
+        {discountItem && (
+          <DiscountModal title={`Descuento: ${discountItem.qty}× ${discountItem.name}`} base={discountItem.unitPrice * discountItem.qty} initial={discountItem.discount}
+            onApply={(d) => setCart(cart.map((x) => (x.id === discountItem.id ? { ...x, discount: d } : x)))}
+            onRemove={() => setCart(cart.map((x) => (x.id === discountItem.id ? { ...x, discount: undefined } : x)))}
+            onClose={() => setDiscountFor(null)} />
         )}
         <CreamPanel cart={cart} picks={picks} setPicks={setPicks} />
       </div>

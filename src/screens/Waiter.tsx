@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { addItems, cancelOrder, createOrder, markServed, orderTotal, payOrder, useDb, useSession } from '../data/store';
-import { KITCHEN_LABEL, type Order, type OrderItem } from '../types';
+import { addItems, cancelOrder, createOrder, discountTotal, lineTotal, markServed, orderTotal, payOrder, setOrderDiscount, useDb, useSession } from '../data/store';
+import { KITCHEN_LABEL, type Discount, type Order, type OrderItem } from '../types';
 import { money, minutesAgo, time, orderNo } from '../lib/format';
 import { buildCreamItem, OrderBuilder, type CreamPicks } from '../components/OrderBuilder';
 import { suggestPackaging } from '../lib/rules';
+import { DiscountModal } from '../components/DiscountModal';
 import { TicketButton } from '../components/TicketButton';
 import { LocalPicker, PaymentModal, useWorkLocal } from '../components/shared';
 import { ConfirmButton, ItemLines, Timeline, useTick } from '../components/ui';
@@ -27,12 +28,17 @@ export function WaiterScreen() {
         title={view.kind === 'new' ? `Mesa ${view.table} · nuevo pedido` : `Mesa ${order?.table} · agregar ítems`}
         localId={localId}
         onCancel={() => setView(view.kind === 'add' ? { kind: 'order', id: view.id } : { kind: 'tables' })}
-        onSend={(items, note) => {
+        onSend={(items, note, _pkg, discount) => {
           if (view.kind === 'new') {
-            const id = createOrder({ localId, channel: 'salon', table: view.table, customer: null, deliveryFee: 0, plannedPay: null, cashWith: null, driverId: null, items, note }, user);
+            const id = createOrder({ localId, channel: 'salon', table: view.table, customer: null, deliveryFee: 0, plannedPay: null, cashWith: null, driverId: null, items, note, discount }, user);
             setView({ kind: 'order', id });
           } else {
             addItems(view.id, items, user);
+            if (discount) {
+              // Se suma al descuento que ya tenía la mesa.
+              const prev = order?.discount;
+              setOrderDiscount(view.id, prev ? { amount: prev.amount + discount.amount, reason: `${prev.reason} + ${discount.reason}` } : discount, user);
+            }
             setView({ kind: 'order', id: view.id });
           }
         }}
@@ -75,11 +81,11 @@ export function WaiterScreen() {
   );
 }
 
-export interface InitialOrder { cart: OrderItem[]; picks: CreamPicks; pkgAmount: number | null; note: string }
+export interface InitialOrder { cart: OrderItem[]; picks: CreamPicks; pkgAmount: number | null; note: string; discount?: Discount }
 export interface Packaging { qty: number; amount: number }
 
 export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true, packaging, initial }: {
-  title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string, packaging: Packaging) => void;
+  title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string, packaging: Packaging, discount?: Discount) => void;
   extra?: React.ReactNode; sendLabel?: string; canSend?: boolean; packaging?: boolean; initial?: InitialOrder;
 }) {
   const db = useDb();
@@ -92,7 +98,11 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
   const suggested = suggestPackaging(cart, db);
   const pkgAmount = packaging ? pkgManual ?? suggested.amount : 0;
   const pkg: Packaging = { qty: packaging ? suggested.qty : 0, amount: pkgAmount };
-  const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0) + pkgAmount;
+  const [discount, setDiscount] = useState<Discount | undefined>(initial?.discount);
+  const [discOpen, setDiscOpen] = useState(false);
+  const beforeDiscount = items.reduce((s, i) => s + lineTotal(i), 0) + pkgAmount;
+  const discAmount = discount ? Math.min(discount.amount, beforeDiscount) : 0;
+  const total = beforeDiscount - discAmount;
   return (
     <div className="page">
       <div className="section-head">
@@ -115,13 +125,25 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
           {pkgManual !== null && pkgManual !== suggested.amount && <button className="link small" onClick={() => setPkgManual(null)}>Usar sugerido ({money(suggested.amount)})</button>}
         </div>
       )}
+      {cart.length > 0 && (
+        <div className="card packaging">
+          <div className="grow">
+            <b>Descuento al pedido</b>
+            <div className="muted small">{discount ? `−${money(discAmount)}${discount.percent ? ` (${discount.percent}%)` : ''} · ${discount.reason}` : 'Opcional: en S/ o en %'}</div>
+          </div>
+          <button className="btn small" onClick={() => setDiscOpen(true)}>{discount ? 'Cambiar' : '% Agregar descuento'}</button>
+        </div>
+      )}
+      {discOpen && (
+        <DiscountModal title="Descuento al pedido" base={beforeDiscount} initial={discount} onApply={setDiscount} onRemove={() => setDiscount(undefined)} onClose={() => setDiscOpen(false)} />
+      )}
       <label className="field">
         <span>Nota general del pedido</span>
         <input id="order-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opcional" />
       </label>
       <div className="sticky-bar">
         <span className="grow">Cuenta: <b>{money(total)}</b> · {cart.reduce((s, i) => s + i.qty, 0)} ítems</span>
-        <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(items, note.trim(), pkg)}>{sendLabel}</button>
+        <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(items, note.trim(), pkg, discount ? { ...discount, amount: discAmount } : undefined)}>{sendLabel}</button>
       </div>
     </div>
   );
@@ -132,6 +154,8 @@ function OrderDetail({ order, onBack, onAdd }: { order: Order; onBack: () => voi
   const db = useDb();
   const [paying, setPaying] = useState(false);
   const total = orderTotal(order);
+  const [discOpen, setDiscOpen] = useState(false);
+  const discBase = order.items.reduce((acc, it) => acc + lineTotal(it), 0);
   const lastRound = Math.max(...order.items.map((i) => i.round));
   const local = db.locales.find((l) => l.id === order.localId);
 
@@ -148,12 +172,15 @@ function OrderDetail({ order, onBack, onAdd }: { order: Order; onBack: () => voi
         </div>
         <ItemLines items={order.items} highlightRound={lastRound} />
         {order.note && <p className="item-note">📝 {order.note}</p>}
+        {order.discount && <div className="total-row discount-row"><span>Descuento al pedido{order.discount.percent ? ` (${order.discount.percent}%)` : ''} · {order.discount.reason}</span><b>−{money(order.discount.amount)}</b></div>}
+        {discountTotal(order) > 0 && <p className="muted small">Ahorro total del cliente: {money(discountTotal(order))}</p>}
         <div className="total-row"><span>Total</span><b>{money(total)}</b></div>
       </div>
       {!order.closed && (
         <div className="action-row">
           <button className="btn" onClick={onAdd}>+ Agregar ítems</button>
           {!order.served && order.kitchenStatus === 'listo' && <button className="btn ok" onClick={() => markServed(order.id, user)}>Marcar servido</button>}
+          <button className="btn" onClick={() => setDiscOpen(true)}>{order.discount ? `Descuento −${money(order.discount.amount)}` : '% Descuento'}</button>
           <button className="btn primary" onClick={() => setPaying(true)}>Cobrar {money(total)}</button>
           <TicketButton order={order} className="btn" label="🧾 Ticket" />
           {user.role === 'admin' && (
@@ -165,6 +192,10 @@ function OrderDetail({ order, onBack, onAdd }: { order: Order; onBack: () => voi
         <summary>Historial del pedido</summary>
         <Timeline order={order} />
       </details>
+      {discOpen && (
+        <DiscountModal title={`Descuento · Mesa ${order.table}`} base={discBase} initial={order.discount}
+          onApply={(d) => setOrderDiscount(order.id, d, user)} onRemove={() => setOrderDiscount(order.id, null, user)} onClose={() => setDiscOpen(false)} />
+      )}
       {paying && (
         <PaymentModal total={total} onClose={() => setPaying(false)} onConfirm={(p) => { payOrder(order.id, p, user); setPaying(false); onBack(); }} />
       )}

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type {
-  Customer, DB, DeliveryStatus, KitchenStatus, Order, OrderItem, Payment, PayMethod, User,
+  Customer, DB, Discount, DeliveryStatus, KitchenStatus, Order, OrderItem, Payment, PayMethod, User,
 } from '../types';
 import { DELIVERY_LABEL, KITCHEN_LABEL } from '../types';
 import { createSeed } from './seed';
@@ -124,14 +124,24 @@ export function logout() {
 
 // ---------- Pedidos ----------
 
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Total de una línea, ya con su descuento. */
+export const lineTotal = (i: Pick<OrderItem, 'unitPrice' | 'qty' | 'discount'>) =>
+  Math.max(0, r2(i.unitPrice * i.qty - (i.discount?.amount ?? 0)));
+
 export const orderSubtotal = (o: Pick<Order, 'items'>) =>
-  o.items.reduce((s, i) => s + i.unitPrice * i.qty, 0);
+  o.items.reduce((s, i) => s + lineTotal(i), 0);
+
+/** Descuentos del pedido: los de cada plato + el del pedido. */
+export const discountTotal = (o: Pick<Order, 'items' | 'discount'>) =>
+  r2(o.items.reduce((s, i) => s + Math.min(i.discount?.amount ?? 0, i.unitPrice * i.qty), 0) + (o.discount?.amount ?? 0));
 
 export const packagingTotal = (o: Pick<Order, 'packagingQty' | 'packagingPrice' | 'packagingAmount'>) =>
   o.packagingAmount ?? (o.packagingQty || 0) * (o.packagingPrice || 0);
 
-export const orderTotal = (o: Pick<Order, 'items' | 'deliveryFee' | 'packagingQty' | 'packagingPrice' | 'packagingAmount'>) =>
-  orderSubtotal(o) + (o.deliveryFee || 0) + packagingTotal(o);
+export const orderTotal = (o: Pick<Order, 'items' | 'deliveryFee' | 'packagingQty' | 'packagingPrice' | 'packagingAmount' | 'discount'>) =>
+  Math.max(0, r2(orderSubtotal(o) + (o.deliveryFee || 0) + packagingTotal(o) - (o.discount?.amount ?? 0)));
 
 function event(user: User, label: string) {
   return { label, at: Date.now(), userId: user.id, userName: user.name };
@@ -146,6 +156,7 @@ export interface NewOrderInput {
   packagingQty?: number;
   packagingPrice?: number;
   packagingAmount?: number;
+  discount?: Discount;
   plannedPay: PayMethod | null;
   cashWith: number | null;
   driverId: string | null;
@@ -189,7 +200,7 @@ export function createOrder({ pickup, ...input }: NewOrderInput, user: User): st
       sentAt: now,
       readyAt: null,
       closedAt: null,
-      history: [event(user, 'Pedido creado y enviado a cocina'), ...(input.driverId ? [event(user, `Driver de turno: ${d.users.find((u) => u.id === input.driverId)?.name ?? ''}`)] : [])],
+      history: [event(user, 'Pedido creado y enviado a cocina'), ...(input.discount ? [event(user, `Descuento al pedido: S/ ${input.discount.amount.toFixed(2)} (${input.discount.reason})`)] : []), ...(input.driverId ? [event(user, `Driver de turno: ${d.users.find((u) => u.id === input.driverId)?.name ?? ''}`)] : [])],
       sunat: { status: 'no_emitido', type: null },
     });
   });
@@ -268,6 +279,14 @@ export function payOrder(orderId: string, payments: Payment[], user: User) {
 export function deleteOrder(orderId: string) {
   mutate((d) => { d.orders = d.orders.filter((o) => o.id !== orderId); });
   void deleteOrderCloud(orderId);
+}
+
+/** Descuento al pedido completo (o quitarlo con null). */
+export function setOrderDiscount(orderId: string, discount: Discount | null, user: User) {
+  withOrder(orderId, (o) => {
+    if (discount) o.discount = { ...discount, by: user.name }; else delete o.discount;
+    o.history.push(event(user, discount ? `Descuento al pedido: S/ ${discount.amount.toFixed(2)} (${discount.reason})` : 'Descuento al pedido quitado'));
+  });
 }
 
 export function cancelOrder(orderId: string, reason: string, user: User) {

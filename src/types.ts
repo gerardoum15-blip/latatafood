@@ -101,6 +101,15 @@ export interface SelectedModifier {
   price: number; // precio total cobrado por esta línea
 }
 
+/** Descuento aplicado (monto en S/ y cómo se calculó). */
+export interface Discount {
+  amount: number;
+  /** Si fue porcentaje, cuánto (ej. 10). */
+  percent?: number;
+  reason: string;
+  by?: string;
+}
+
 export interface OrderItem {
   id: string;
   productId: string;
@@ -111,6 +120,8 @@ export interface OrderItem {
   modifiers: SelectedModifier[];
   note: string;
   round: number;
+  /** Descuento sobre esta línea (total de la línea). */
+  discount?: Discount;
 }
 
 export type Channel = 'salon' | 'delivery';
@@ -179,6 +190,8 @@ export interface Order {
   packagingPrice?: number;
   /** Monto total de empaques (si existe, reemplaza a cantidad × precio). */
   packagingAmount?: number;
+  /** Descuento al pedido completo. */
+  discount?: Discount;
   /** Delivery: forma de pago acordada con el cliente. */
   plannedPay: PayMethod | null;
   cashWith: number | null;

@@ -490,3 +490,7 @@ textarea#paste-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .open-pill { font-size: 0.75rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: #eceaea; color: var(--muted); white-space: nowrap; }
 .open-pill.on { background: var(--ok-soft); color: var(--ok); }
 .local-map-btn { align-self: flex-start; margin-top: 4px; background: var(--ink); color: #ffffff; border-color: var(--ink); }
+.item-discount { margin-left: 34px; font-size: 0.85rem; color: var(--ok); font-weight: 600; }
+.discount-row { color: var(--ok); border-top: 0; padding-top: 0; }
+.discount-preview { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }
+.map-loading { display: grid; place-items: center; color: var(--muted); background: var(--surface-2); border-radius: var(--radius); font-size: 0.9rem; }

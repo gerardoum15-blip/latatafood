@@ -1,5 +1,5 @@
 import type { Channel, DB, Order, PayMethod } from '../types';
-import { orderTotal, packagingTotal } from '../data/store';
+import { discountTotal, lineTotal, orderTotal, packagingTotal } from '../data/store';
 import { dayKey } from './format';
 
 export type Period = 'hoy' | 'ayer' | 'semana' | 'mes' | 'anio' | 'rango';
@@ -71,6 +71,7 @@ export interface Report {
   itemsTotal: number;
   deliveryFees: number;
   packaging: number;
+  discounts: number;
   count: number;
   avgTicket: number;
   salon: { count: number; total: number };
@@ -94,7 +95,7 @@ export function buildReport(db: DB, f: ReportFilter): Report {
     return db.categories.find((c) => c.id === p?.categoryId)?.name ?? '—';
   };
 
-  let total = 0, itemsTotal = 0, deliveryFees = 0, packaging = 0;
+  let total = 0, itemsTotal = 0, deliveryFees = 0, packaging = 0, discounts = 0;
   const salon = { count: 0, total: 0 };
   const delivery = { count: 0, total: 0 };
   const days = new Map<string, { day: string; total: number; count: number; salon: number; delivery: number }>();
@@ -110,6 +111,7 @@ export function buildReport(db: DB, f: ReportFilter): Report {
     total += t;
     deliveryFees += o.deliveryFee || 0;
     packaging += packagingTotal(o);
+    discounts += discountTotal(o);
     const bucket = o.channel === 'salon' ? salon : delivery;
     bucket.count++; bucket.total += t;
 
@@ -119,7 +121,7 @@ export function buildReport(db: DB, f: ReportFilter): Report {
     days.set(dk, day);
 
     for (const it of o.items) {
-      const amount = it.unitPrice * it.qty;
+      const amount = lineTotal(it);
       itemsTotal += amount;
       const row = items.get(it.productId) ?? { productId: it.productId, name: it.name, category: catName(it.productId), qty: 0, amount: 0, salonQty: 0, deliveryQty: 0 };
       row.qty += it.qty; row.amount += amount;
@@ -161,6 +163,7 @@ export function buildReport(db: DB, f: ReportFilter): Report {
     itemsTotal,
     deliveryFees,
     packaging,
+    discounts,
     count: orders.length,
     avgTicket: orders.length ? total / orders.length : 0,
     salon,

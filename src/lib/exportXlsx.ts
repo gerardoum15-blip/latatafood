@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { DB } from '../types';
 import { PAY_LABEL } from '../types';
-import { orderTotal, packagingTotal } from '../data/store';
+import { discountTotal, orderTotal, packagingTotal } from '../data/store';
 import type { Report } from './reports';
 import { dateTime } from './format';
 
@@ -19,6 +19,7 @@ export function exportReport(db: DB, rep: Report, title: string) {
     ['Salón: tickets', rep.salon.count], ['Salón: ventas', r2(rep.salon.total)],
     ['Delivery: pedidos', rep.delivery.count], ['Delivery: ventas', r2(rep.delivery.total)],
     ['Empaques cobrados', r2(rep.packaging)],
+    ['Descuentos dados', r2(rep.discounts)],
     [],
     ['Forma de pago', 'Monto', 'Operaciones'],
     ...rep.byPay.map((p) => [PAY_LABEL[p.method], r2(p.total), p.count]),
@@ -46,7 +47,7 @@ export function exportReport(db: DB, rep: Report, title: string) {
     Canal: o.channel === 'salon' ? `Salón (mesa ${o.table})` : 'Delivery',
     Cliente: o.customer?.name ?? '',
     Ítems: o.items.map((i) => `${i.qty}× ${i.name}`).join(' | '),
-    Empaques: o.packagingQty ?? 0, 'Monto empaques': r2(packagingTotal(o)), Total: r2(orderTotal(o)),
+    Empaques: o.packagingQty ?? 0, 'Monto empaques': r2(packagingTotal(o)), Descuento: r2(discountTotal(o)), 'Motivo descuento': [o.discount?.reason, ...o.items.map((i) => i.discount?.reason)].filter(Boolean).join(' | '), Total: r2(orderTotal(o)),
     Pago: o.payments.map((p) => PAY_LABEL[p.method]).join(' + '),
     Driver: db.users.find((u) => u.id === o.driverId)?.name ?? '',
   }))), 'Tickets');

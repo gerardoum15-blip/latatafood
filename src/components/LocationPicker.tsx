@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-export interface PickedLocation { lat: number; lng: number }
+import type { PickedLocation } from '../lib/geo';
+export type { PickedLocation };
 
 /** Santa Anita, Lima: punto de partida si el cliente no comparte su GPS. */
 const DEFAULT_CENTER: [number, number] = [-12.0433, -76.9714];
 
-export const mapsUrlFor = (p: PickedLocation) => `https://www.google.com/maps?q=${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+export { mapsUrlFor } from '../lib/geo';
 
 /** Dirección sugerida a partir de las coordenadas (OpenStreetMap). */
 export async function reverseGeocode(p: PickedLocation): Promise<string> {

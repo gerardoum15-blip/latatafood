@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { logout, useDb, useSession } from '../data/store';
+import { lineTotal, logout, useDb, useSession } from '../data/store';
 import { ROLE_LABEL, type Order, type OrderItem } from '../types';
 import { SyncBadge } from '../screens/Device';
 import { money } from '../lib/format';
@@ -64,7 +64,7 @@ export function ItemLines({ items, big, showPrices = true, highlightRound }: { i
           <div className="item-row">
             <span className="item-qty">{it.qty}×</span>
             <span className="item-name">{it.name}</span>
-            {showPrices && <span className="item-price">{money(it.unitPrice * it.qty)}</span>}
+            {showPrices && <span className="item-price">{it.discount ? <><s className="muted">{money(it.unitPrice * it.qty)}</s> {money(lineTotal(it))}</> : money(it.unitPrice * it.qty)}</span>}
           </div>
           {it.modifiers.length > 0 && (
             <div className="item-mods">
@@ -74,6 +74,7 @@ export function ItemLines({ items, big, showPrices = true, highlightRound }: { i
             </div>
           )}
           {it.note && <div className="item-note">📝 {it.note}</div>}
+          {showPrices && it.discount && <div className="item-discount">Descuento −{money(it.discount.amount)}{it.discount.percent ? ` (${it.discount.percent}%)` : ''} · {it.discount.reason}</div>}
         </li>
       ))}
     </ul>
