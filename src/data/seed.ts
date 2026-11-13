@@ -1,4 +1,4 @@
-import { COMBO_SODA_GROUP, WEEKDAY_COMBOS } from './menuUpdates';
+import { WEEKDAY_COMBOS } from './menuUpdates';
 import type { DB, ModifierGroup, Product } from '../types';
 
 const opt = (id: string, name: string, price = 0) => ({ id, name, price });
@@ -129,7 +129,7 @@ export function createSeed(): DB {
     version: 2,
     settings: {
       businessName: 'La Tata Food',
-      menuUpdates: ['combos-lv'],
+      menuUpdates: ['combos-lv', 'combos-pepsi'],
       whatsapp: '955093657',
       packagingPrice: 0.5,
       msgEnCamino: 'Hola {cliente}, soy {driver} de {negocio}. Ya tengo tu pedido, estoy en camino a tu dirección.',
@@ -160,7 +160,7 @@ export function createSeed(): DB {
       { id: 'c-combos', name: 'Combos y promociones', order: 8 },
       { id: 'c-adicionales', name: 'Adicionales', order: 9, packaging: false },
     ],
-    groups: [...groups, structuredClone(COMBO_SODA_GROUP)],
+    groups,
     products: [...products, ...structuredClone(WEEKDAY_COMBOS)],
     orders: [],
     counters: {},

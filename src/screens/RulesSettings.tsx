@@ -1,6 +1,6 @@
 import { mutate, useDb } from '../data/store';
 import { money } from '../lib/format';
-import { DELIVERY_TIERS_VERSION, deliveryTiers, kmLabel, loyalty, packagingMax, packagingTiers, payInfo, roadFactor, waitTiers } from '../lib/rules';
+import { comboPackagingTiers, DELIVERY_TIERS_VERSION, deliveryTiers, kmLabel, loyalty, packagingMax, packagingTiers, payInfo, roadFactor, waitTiers } from '../lib/rules';
 
 /** Ajustes: empaques por precio, tiempo de espera y datos de pago. */
 export function RulesSettings() {
@@ -9,6 +9,8 @@ export function RulesSettings() {
   const wt = waitTiers(db);
   const pi = payInfo(db);
   const setPT = (next: typeof pt) => mutate((d) => { d.settings.packagingTiers = next; });
+  const ct = comboPackagingTiers(db);
+  const setCT = (next: typeof ct) => mutate((d) => { d.settings.comboPackagingTiers = next; });
   const setWT = (next: typeof wt) => mutate((d) => { d.settings.waitTiers = next; });
   const dt = deliveryTiers(db);
   const setDT = (next: typeof dt) => mutate((d) => { d.settings.deliveryTiers = next; d.settings.deliveryTiersV = DELIVERY_TIERS_VERSION; });
@@ -30,6 +32,21 @@ export function RulesSettings() {
         <button className="btn ghost small" onClick={() => setPT([...pt, { min: 0, price: 0 }])}>+ Agregar rango</button>
         <label className="field inline"><span>Tope por plato (S/)</span><input id="pkg-max" type="number" inputMode="decimal" step="0.5" value={packagingMax(db)} onChange={(e) => mutate((d) => { d.settings.packagingMax = Number(e.target.value); })} /></label>
         <p className="muted small">Ejemplo: un plato de S/ 25 paga {money(Math.min([...pt].sort((a, b) => b.min - a.min).find((t) => 25 >= t.min)?.price ?? 0, packagingMax(db)))}.</p>
+      </div>
+
+      <div className="card ticket-settings">
+        <h3>Empaque de combos</h3>
+        <p className="muted small">Solo para la categoría "Combos y promociones". Reemplaza al empaque por plato.</p>
+        <div className="tier-row muted small"><span>Combo hasta (S/)</span><span>Empaque (S/)</span><span /></div>
+        {ct.map((t, i) => (
+          <div key={i} className="tier-row">
+            <input type="number" inputMode="decimal" aria-label="Precio del combo hasta" value={t.upTo} onChange={(e) => setCT(ct.map((x, j) => (j === i ? { ...x, upTo: Number(e.target.value) } : x)))} />
+            <input type="number" inputMode="decimal" step="0.5" aria-label="Empaque del combo" value={t.price} onChange={(e) => setCT(ct.map((x, j) => (j === i ? { ...x, price: Number(e.target.value) } : x)))} />
+            <button className="icon-btn" aria-label="Quitar fila" onClick={() => setCT(ct.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <button className="btn ghost small" onClick={() => setCT([...ct, { upTo: 60, price: 3 }])}>+ Agregar rango</button>
+        <p className="muted small">Si el combo cuesta más que el último rango, se cobra el último.</p>
       </div>
 
       <div className="card ticket-settings">

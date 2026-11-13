@@ -97,9 +97,13 @@ function WaiterScreenInner() {
 export interface InitialOrder { cart: OrderItem[]; picks: CreamPicks; pkgAmount: number | null; note: string; discount?: Discount }
 export interface Packaging { qty: number; amount: number }
 
-export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true, packaging, initial }: {
+export interface Draft { items: OrderItem[]; note: string; pkg: Packaging; discount: number; subtotal: number }
+
+export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 'Enviar a cocina', canSend = true, packaging, initial, beforeSend }: {
   title: string; localId: string; onCancel?: () => void; onSend: (items: OrderItem[], note: string, packaging: Packaging, discount?: Discount) => void;
   extra?: import('react').ReactNode; sendLabel?: string; canSend?: boolean; packaging?: boolean; initial?: InitialOrder;
+  /** Paso previo a cocina (ej. confirmar con el cliente), con el pedido tal como está. */
+  beforeSend?: (d: Draft) => import('react').ReactNode;
 }) {
   const db = useDb();
   const [cart, setCart] = useState<OrderItem[]>(initial?.cart ?? []);
@@ -154,6 +158,7 @@ export function NewItems({ title, localId, onCancel, onSend, extra, sendLabel = 
         <span>Nota general del pedido</span>
         <input id="order-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opcional" />
       </label>
+      {beforeSend && cart.length > 0 && beforeSend({ items, note: note.trim(), pkg, discount: discAmount, subtotal: total })}
       <div className="sticky-bar">
         <span className="grow">Cuenta: <b>{money(total)}</b> · {cart.reduce((s, i) => s + i.qty, 0)} ítems</span>
         <button className="btn primary" disabled={cart.length === 0 || !canSend} onClick={() => onSend(items, note.trim(), pkg, discount ? { ...discount, amount: discAmount } : undefined)}>{sendLabel}</button>

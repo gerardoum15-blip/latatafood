@@ -253,6 +253,8 @@ export interface Settings {
   deliveryTiersV?: number;
   /** Actualizaciones de carta ya aplicadas. */
   menuUpdates?: string[];
+  /** Empaque exclusivo de combos según su precio. */
+  comboPackagingTiers?: { upTo: number; price: number }[];
   /** Factor para pasar de distancia en línea recta a distancia por calles (ej. 1.3). */
   roadFactor?: number;
   /** Personas que reparten (eligen quién maneja al entrar con el usuario de drivers). */

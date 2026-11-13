@@ -67,6 +67,20 @@ export function needsPackaging(db: DB, it: OrderItem): boolean {
   return (p?.packaging ?? c?.packaging) !== false;
 }
 
+/** Empaque de los combos (exclusivo): hasta S/ 20 → 1; hasta 30 → 2; hasta 40 → 2.50; más → 3. */
+export const DEFAULT_COMBO_PACKAGING = [
+  { upTo: 20, price: 1 },
+  { upTo: 30, price: 2 },
+  { upTo: 40, price: 2.5 },
+  { upTo: 50, price: 3 },
+];
+export const comboPackagingTiers = (db: DB) => (db.settings.comboPackagingTiers?.length ? db.settings.comboPackagingTiers : DEFAULT_COMBO_PACKAGING).slice().sort((a, b) => a.upTo - b.upTo);
+export function comboPackagingFor(db: DB, price: number): number {
+  const t = comboPackagingTiers(db);
+  return (t.find((x) => price <= x.upTo) ?? t[t.length - 1])?.price ?? 0;
+}
+const isCombo = (db: DB, it: OrderItem) => db.products.find((x) => x.id === it.productId)?.categoryId === 'c-combos';
+
 /** Empaque de un plato según su precio, con tope por plato. */
 export function packagingFor(db: DB, price: number): number {
   const tier = [...packagingTiers(db)].sort((a, b) => b.min - a.min).find((t) => price >= t.min);
@@ -79,7 +93,7 @@ export function suggestPackaging(items: OrderItem[], db: DB): { qty: number; amo
   for (const it of items) {
     if (!needsPackaging(db, it)) continue;
     qty += it.qty;
-    amount += packagingFor(db, it.unitPrice) * it.qty;
+    amount += (isCombo(db, it) ? comboPackagingFor(db, it.unitPrice) : packagingFor(db, it.unitPrice)) * it.qty;
   }
   return { qty, amount: Math.round(amount * 100) / 100 };
 }

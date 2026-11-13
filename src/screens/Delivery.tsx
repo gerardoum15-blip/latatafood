@@ -7,11 +7,11 @@ import { dateShort, minutesAgo } from '../lib/format';
 import { CLOUD, resolveRequest, useRequests, type OrderRequest } from '../data/cloud';
 import { beep } from './Kitchen';
 import { driverName } from '../lib/drivers';
-import { buildCustomers, phoneId, TIER_LABEL } from '../lib/customers';
+import { buildCustomers, lastOrderOf, phoneId, TIER_LABEL } from '../lib/customers';
 import { useAddressGeo, useLocalGeo } from '../lib/useLocalGeo';
-import { deliveryFeeFor, kmLabel, maxDeliveryKm, nearestLocal, roadKm } from '../lib/rules';
+import { deliveryFeeFor, kmLabel, maxDeliveryKm, nearestLocal, payInfo, roadKm } from '../lib/rules';
 import { LocalPicker } from '../components/shared';
-import { NewItems, type InitialOrder } from './Waiter';
+import { NewItems, type Draft, type InitialOrder } from './Waiter';
 import { Modal } from '../components/ui';
 import { TicketButton } from '../components/TicketButton';
 import { parseOrderMessage, webOrderToParsed, type ParsedOrder } from '../lib/parseOrder';
@@ -54,6 +54,8 @@ export function DeliveryScreen() {
   const [dineIn, setDineIn] = useState<{ table: number | null } | null>(null);
   const [pickup, setPickup] = useState(false);
   const [payOk, setPayOk] = useState(false);
+  /** Pedido tal como se lo confirmó el cliente (si cambia algo, hay que volver a confirmar). */
+  const [confirmedSig, setConfirmedSig] = useState<string | null>(null);
 
   const applyParsed = (r: ParsedOrder) => {
     setCustomer({ ...EMPTY, ...r.customer });
@@ -64,6 +66,7 @@ export function DeliveryScreen() {
     setPayOk(false);
     setLocalId(r.localId ?? defaultLocal);
     setLocalManual(false);
+    setConfirmedSig(null);
     if (r.pay) setPay(r.pay);
     setCashWith(r.cashWith ? String(r.cashWith) : '');
     setInitial({ cart: r.cart, picks: r.creamPicks, pkgAmount: r.packaging, note: [r.pickup ? 'RECOJO EN LOCAL' : '', r.dineIn ? 'COMER EN MESA' : '', r.note].filter(Boolean).join(' · ') });
@@ -88,7 +91,8 @@ export function DeliveryScreen() {
   const valid = dineIn
     ? !!(customer.name.trim() && dineIn.table)
     : !!(customer.name.trim() && customer.phone.trim() && (customer.address.trim() || isUrl(customer.mapsUrl)) && (!customer.mapsUrl.trim() || isUrl(customer.mapsUrl)));
-  const canSend = valid && !!localId && (!activeReq || payOk);
+  const needsConfirm = !dineIn;
+  const canSend = valid && !!localId && (needsConfirm ? confirmedSig !== null : (!activeReq || payOk));
   const turnDriverId = nextDriver(db);
   const turnDriver = turnDriverId ? { name: driverName(db, turnDriverId) } : undefined;
 
@@ -124,11 +128,14 @@ export function DeliveryScreen() {
     if (!profile || lastAutofill.current === profile.phone) return;
     lastAutofill.current = profile.phone;
     const a = profile.addresses[0];
+    const last = lastOrderOf(db, profile.phone);
     setCustomer((c) => ({
       ...c,
       name: c.name || profile.name,
+      reference: c.reference || last?.customer?.reference || '',
       ...(!c.address && a ? { address: a.address, mapsUrl: a.mapsUrl, lat: a.lat, lng: a.lng, label: a.label } : {}),
     }));
+    if (!activeReq && last?.plannedPay) setPay(last.plannedPay);
   }, [profile]);
 
   if (sent) {
@@ -155,7 +162,7 @@ export function DeliveryScreen() {
       title="Nuevo pedido delivery"
       localId={priceLocal}
       canSend={canSend}
-      sendLabel={!localId ? 'Elige el local que prepara' : !valid ? (dineIn ? 'Falta el número de mesa' : 'Faltan datos del cliente') : !canSend ? 'Valida el pago primero' : 'Enviar a cocina'}
+      sendLabel={!localId ? 'Elige el local que prepara' : !valid ? (dineIn ? 'Falta el número de mesa' : 'Faltan datos del cliente') : !canSend ? (needsConfirm ? 'Confirma con el cliente primero' : 'Valida el pago primero') : 'Enviar a cocina'}
       extra={
         <>
         {CLOUD && (
@@ -215,11 +222,14 @@ export function DeliveryScreen() {
                 ? `Efectivo${cashWith ? `: paga con S/ ${cashWith}. Prepara el vuelto.` : ': confirma con cuánto pagará.'}`
                 : `${PAY_LABEL[pay]}: revisa la captura del pago en el WhatsApp ${db.settings.whatsapp}.`}
             </p>
-            <label className="check"><input id="pay-ok" type="checkbox" checked={payOk} onChange={(e) => setPayOk(e.target.checked)} /> {pay === 'efectivo' ? 'Monto y vuelto confirmados' : 'Pago verificado (captura recibida)'}</label>
+            {dineIn ? <label className="check"><input id="pay-ok" type="checkbox" checked={payOk} onChange={(e) => setPayOk(e.target.checked)} /> {pay === 'efectivo' ? 'Monto y vuelto confirmados' : 'Pago verificado (captura recibida)'}</label>
+              : <p className="small">Abajo, antes de enviar a cocina, mándale el resumen para que confirme y valida el pago.</p>}
             {dineIn && <p className="small"><b>Comer en mesa</b> · no lleva empaque.</p>}
           </div>
         )}
         <div className="card form-grid">
+          <label className="field full"><span>📱 WhatsApp del cliente * <span className="muted small">(escríbelo primero: si ya pidió antes, se llena todo solo)</span></span><input id="d-phone" type="tel" inputMode="tel" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="987654321" autoFocus={!activeReq} /></label>
+          <label className="field"><span>Nombre *</span><input id="d-name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} /></label>
           {dineIn && (
             <label className="field full"><span>Mesa N° *</span>
               <select id="d-table" value={dineIn.table ?? ''} onChange={(e) => setDineIn({ table: e.target.value ? Number(e.target.value) : null })}>
@@ -235,8 +245,6 @@ export function DeliveryScreen() {
             {!localId && <p className="err-text small">Elige qué local prepara este pedido (según la demanda o la cercanía al cliente).</p>}
             {!localId && customer.mapsUrl && <p className="small"><a href={customer.mapsUrl} target="_blank" rel="noreferrer">Ver la ubicación del cliente en el mapa</a></p>}
           </div>
-          <label className="field"><span>Nombre *</span><input id="d-name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} /></label>
-          <label className="field"><span>Contacto (WhatsApp) *</span><input id="d-phone" type="tel" inputMode="tel" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="987654321" /></label>
           {profile && (
             <div className={`full customer-card tier-${profile.tier}`}>
               <div className="row between wrap">
@@ -285,6 +293,8 @@ export function DeliveryScreen() {
         </>
       }
       packaging={!dineIn}
+      beforeSend={needsConfirm ? (d) => <ConfirmStep draft={d} fee={pickup || indrive ? 0 : fee} pickup={pickup} indrive={indrive} customer={customer} pay={pay} cashWith={cashWith}
+        confirmedSig={confirmedSig} onConfirm={setConfirmedSig} /> : undefined}
       onSend={(items, note, pkg, discount) => {
         const c = { ...customer, name: customer.name.trim(), phone: customer.phone.trim(), address: customer.address.trim(), mapsUrl: customer.mapsUrl.trim() };
         let id: string;
@@ -302,8 +312,56 @@ export function DeliveryScreen() {
         }
         if (activeReq) void resolveRequest(activeReq.id, 'aceptado', user.name, { order_id: id });
         setSent({ id, ref: activeReq?.id ?? id, name: c.name, phone: c.phone, localName: local?.name ?? '', total: orderTotal({ items, deliveryFee: dineIn ? 0 : fee, packagingAmount: dineIn ? 0 : pkg.amount, discount }) });
-        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal); setLocalManual(false); setFeeManual(null); setIndriveManual(null); lastAutofill.current = '';
+        setCustomer(EMPTY); setCashWith(''); setPay('efectivo'); setDineIn(null); setPickup(false); setPayOk(false); setLocalId(defaultLocal); setLocalManual(false); setConfirmedSig(null); setFeeManual(null); setIndriveManual(null); lastAutofill.current = '';
       }}
     />
+  );
+}
+
+/** Antes de cocina: el mozo delivery manda el resumen al cliente, cobra y marca que confirmó. */
+function ConfirmStep({ draft, fee, pickup, indrive, customer, pay, cashWith, confirmedSig, onConfirm }: {
+  draft: Draft; fee: number; pickup: boolean; indrive: boolean; customer: Customer; pay: PayMethod; cashWith: string;
+  confirmedSig: string | null; onConfirm: (sig: string | null) => void;
+}) {
+  const db = useDb();
+  const total = Math.round((draft.subtotal + fee) * 100) / 100;
+  const sig = JSON.stringify([draft.items.map((i) => [i.name, i.qty, i.unitPrice, i.modifiers.map((m) => m.optionId + m.qty)]), draft.pkg.amount, draft.discount, fee, total, pay, customer.address, pickup, indrive]);
+  const changed = confirmedSig !== null && confirmedSig !== sig;
+  // Si cambió el pedido después de confirmar, hay que volver a confirmarlo.
+  useEffect(() => { if (changed) onConfirm(null); }, [changed, onConfirm]);
+  const pi = payInfo(db);
+  const L: string[] = [];
+  L.push(`Hola${customer.name ? ` ${customer.name.split(' ')[0]}` : ''}, te escribe ${db.settings.businessName}. Por favor confirma tu pedido:`);
+  L.push('');
+  for (const it of draft.items) {
+    L.push(`${it.qty}× ${it.name} — ${money(it.unitPrice * it.qty)}`);
+    for (const m of it.modifiers) L.push(`   · ${m.groupName}: ${m.qty > 1 ? `${m.qty}× ` : ''}${m.optionName}`);
+    if (it.note) L.push(`   Nota: ${it.note}`);
+  }
+  if (draft.pkg.amount) L.push(`Empaques: ${money(draft.pkg.amount)}`);
+  if (pickup) L.push('Recojo en local');
+  else if (indrive) L.push('Envío por InDrive (lo coordinamos contigo)');
+  else L.push(`Delivery: ${money(fee)}`);
+  if (draft.discount) L.push(`Descuento: −${money(draft.discount)}`);
+  L.push(`*Total a pagar: ${money(total)}*`);
+  if (!pickup && customer.address) L.push(`Entrega en: ${customer.address}`);
+  L.push('');
+  if (pay === 'yape') L.push(`Pago por Yape al ${pi.yape}. Envíanos la captura por aquí.`);
+  else if (pay === 'plin') L.push(`Pago por Plin al ${pi.plin}. Envíanos la captura por aquí.`);
+  else if (pay === 'efectivo') L.push(`Pago en efectivo al recibir${cashWith ? ` (pagas con S/ ${cashWith})` : '. ¿Con cuánto pagarás, para llevarte el vuelto?'}`);
+  else if (pay === 'web' && pi.webUrl) L.push(`Paga aquí: ${pi.webUrl} y envíanos la captura.`);
+  else L.push(`Pago: ${PAY_LABEL[pay]}.`);
+  L.push('Responde *OK* y lo mandamos a cocina.');
+  const ok = confirmedSig === sig;
+  return (
+    <div className={ok ? 'card confirm-step ok' : 'card confirm-step'}>
+      <b>Confirmar con el cliente y cobrar</b>
+      <p className="small muted">Mándale el resumen. Puedes cambiar el pedido hasta enviarlo a cocina; si cambias algo, vuelve a mandarlo.</p>
+      {changed && <p className="err-text small">Cambiaste el pedido: vuelve a enviarle el resumen.</p>}
+      <a className="btn wa block" target="_blank" rel="noreferrer" aria-disabled={!customer.phone.trim()}
+        href={customer.phone.trim() ? waLink(customer.phone, L.join('\n')) : undefined}>📲 Enviar resumen al cliente ({money(total)})</a>
+      <label className="check"><input id="pay-ok" type="checkbox" checked={ok} onChange={(e) => onConfirm(e.target.checked ? sig : null)} />
+        {' '}El cliente confirmó y {pay === 'efectivo' ? 'sé con cuánto paga' : 'ya pagó (captura recibida)'}</label>
+    </div>
   );
 }
